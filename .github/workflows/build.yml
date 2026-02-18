@@ -32,8 +32,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Python setuptools (needed for node-gyp on macOS/Linux)
-        if: runner.os != 'Windows'
+      - name: Setup Python (needed for node-gyp native builds)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python setuptools (provides distutils for node-gyp)
         run: pip install setuptools
 
       - name: Install root dependencies
