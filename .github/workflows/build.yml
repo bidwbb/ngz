@@ -11,6 +11,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false  # Don't cancel other builds if one fails
       matrix:
         include:
           - os: windows-latest
@@ -30,6 +31,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Install Python setuptools (needed for node-gyp on macOS/Linux)
+        if: runner.os != 'Windows'
+        run: pip install setuptools
 
       - name: Install root dependencies
         run: npm install
