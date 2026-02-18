@@ -1,0 +1,92 @@
+{
+  "name": "ngz",
+  "version": "0.1.0",
+  "description": "SPORTident card reader with course validation for orienteering events",
+  "main": "electron/dist/electron/main.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "cli": "ts-node src/cli.ts",
+    "renderer:install": "cd electron/renderer && npm install",
+    "renderer:dev": "cd electron/renderer && npm run dev",
+    "renderer:build": "cd electron/renderer && npm run build",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run electron:compile && electron electron/dist/electron/main.js",
+    "dev": "concurrently \"npm run renderer:dev\" \"sleep 3 && npm run electron:dev\"",
+    "build": "npm run renderer:build && npm run electron:compile",
+    "start": "npm run build && electron electron/dist/electron/main.js",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.ngz.app",
+    "productName": "NGZ",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/dist/**/*",
+      "electron/renderer/dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.sports",
+      "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Sports",
+      "icon": "build"
+    },
+    "extraResources": []
+  },
+  "license": "MIT",
+  "dependencies": {
+    "serialport": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@types/serialport": "^8.0.5",
+    "concurrently": "^9.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}

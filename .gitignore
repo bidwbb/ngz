@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+electron/dist/
+electron/renderer/dist/
+electron/renderer/node_modules/
+*.log
+.DS_Store
+Thumbs.db
