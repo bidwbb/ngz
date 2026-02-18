@@ -1,67 +1,65 @@
 # NGZ — SPORTident Card Reader
 
-A TypeScript/Electron app for reading SPORTident cards at orienteering events. Shows a full-screen happy/sad face result display with course validation.
+A desktop app for reading SPORTident cards at orienteering events. Shows a full-screen happy/sad face result display with course validation — great for school and youth events.
 
 ## Quick Start
 
-### Prerequisites
-- **Node.js** 18+ (download from https://nodejs.org)
-- **SPORTident station** (BSF8, BS11, etc.) connected via USB
-- Station must be in **readout mode** with **extended protocol** and **handshake mode** enabled
+### 1. Download
 
-### Install
+Go to the [Releases](https://github.com/bidwbb/ngz/releases) page and download the right file for your computer:
 
-```bash
-# Install root dependencies (SI protocol, Electron, etc.)
-npm install
-npm install serialport
-npm install --save-dev @types/serialport
+- **Windows**: `NGZ Setup 0.1.0.exe` (installer) or `NGZ 0.1.0.exe` (portable, no install needed)
+- **macOS**: `NGZ-0.1.0.dmg`
+- **Linux**: `NGZ-0.1.0.AppImage`
 
-# Install renderer dependencies (React, Vite)
-npm run renderer:install
-```
+### 2. Install the USB Driver
 
-### Run the Desktop App
+Your computer needs the **Silicon Labs CP210x driver** to communicate with the SPORTident station.
 
-```bash
-# Development mode (hot-reload on UI changes)
-npm run dev
+- **Windows**: Download from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Windows 10/11 may install it automatically when you plug in the station.
+- **macOS**: Download from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers).
+- **Linux**: Usually built in. If the station isn't detected, run `sudo usermod -a -G dialout $USER` and log out/in.
 
-# Or build and run production
-npm start
-```
+### 3. Run
 
-### Run the CLI (no GUI)
-
-```bash
-npx ts-node src/cli.ts              # Auto-detect SI station
-npx ts-node src/cli.ts COM3         # Specify port
-npx ts-node src/cli.ts --list       # List available ports
-```
+1. Plug in your SPORTident station via USB
+2. Launch NGZ
+3. Select the COM port (auto-detected SPORTident stations are marked with ★)
+4. Select an event (Animal-O is built in, or create your own)
+5. Click **Connect** — the station beeps twice when ready
+6. Insert SI cards to read them!
 
 ## How It Works
 
-### Setup Screen
-1. Select your serial port (auto-detects SPORTident stations)
-2. Optionally define courses with control code sequences
-3. Click **Connect** — the station beeps twice when ready
-
 ### Reading Cards
-- Insert an SI card into the station
-- Full-screen result appears:
-  - **Green happy face** + ascending chime = all controls OK
-  - **Red sad face** + descending buzz = missing controls (PM)
-- Shows race time, card number, course name, and per-control breakdown
-- Click to pause, click again to dismiss (or auto-dismiss after 10s)
 
-### Course Definition
-- Type control codes separated by commas: `31, 32, 33, 34, 35`
-- Choose **Inline** (order matters) or **Score-O** (any order)
-- Multiple courses supported — auto-detects which course the card matches
-- Courses are optional — without them, the reader just displays card data
+Insert an SI card into the station and a full-screen result appears:
+
+- **Green happy face** + ascending chime = all controls correct
+- **Red sad face** + descending buzz = missing or wrong controls
+
+Shows the course name, race time, card number, and a per-control breakdown. Click to pause the display, click again to dismiss (or it auto-dismisses after 10 seconds).
+
+### Events and Courses
+
+An event is a set of courses. On the setup screen:
+
+- The **Animal-O** event is built in with 10 courses (Lion, Bee, Crab, etc.)
+- Click **+ New Event** to create your own:
+  - **Paste Controls** — type courses like `Lion: 31, 33, 36, 38, 39` (one per line)
+  - **IOF XML** — import a course file from Purple Pen, OCAD, or Condes
+
+The app auto-detects which course a card matches based on the punches.
+
+### Course Validation
+
+- **Inline courses**: Controls must appear in the correct order. Extra controls are allowed (the app only checks that the required sequence is present).
+- **Score-O courses**: Controls can be in any order.
+- Only punches between the card's start and finish times are considered, so you don't need to clear cards between runs.
 
 ### Log Screen
-- **Read History**: Table of all cards read with status
+
+- **Read History**: Table of all cards read with OK/PM status
 - **Protocol Log**: Raw SI protocol messages for debugging
 
 ## Station Configuration
@@ -78,12 +76,68 @@ Configure using **SI-Config** or **SportIdent Config+**.
 
 SiCard 5, 6, 6*, 8, 9, 10, 11, SIAC (including 192-punch mode)
 
-## Project Structure
+## Troubleshooting
+
+### "No SPORTident station found"
+- Check USB connection and make sure the CP210x driver is installed
+- Try unplugging and replugging the USB cable
+- Linux: `sudo usermod -a -G dialout $USER`
+
+### "Master station did not answer"
+- Verify station is in readout mode with extended protocol
+- Ensure no other program (SI-Config, etc.) is using the serial port
+
+### Windows SmartScreen warning
+The app is not code-signed, so Windows may show a blue warning the first time you run it. Click **More info** → **Run anyway**. This only happens once.
+
+---
+
+## For Developers
+
+### Prerequisites
+- **Node.js** 18+ (download from https://nodejs.org)
+- **SPORTident station** connected via USB
+
+### Install and Run
+
+```bash
+# Install dependencies
+npm install
+npm install serialport
+npm install --save-dev @types/serialport
+npm run renderer:install
+
+# Development mode (hot-reload)
+npm run dev
+
+# Build and run production
+npm start
+```
+
+### CLI (no GUI)
+
+```bash
+npx ts-node src/cli.ts              # Auto-detect SI station
+npx ts-node src/cli.ts COM3         # Specify port
+npx ts-node src/cli.ts --list       # List available ports
+```
+
+### Building Installers
+
+```bash
+npm run dist:win     # Windows .exe
+npm run dist:mac     # macOS .dmg
+npm run dist:linux   # Linux .AppImage
+```
+
+Installers are output to the `release/` folder. The GitHub Actions workflow builds all three platforms automatically when you push a version tag (`git tag v0.2.0 && git push origin v0.2.0`).
+
+### Project Structure
 
 ```
 ngz/
 ├── src/                        # Core library (no Electron dependency)
-│   ├── si-protocol/            # SI protocol port (from GecoSI)
+│   ├── si-protocol/            # SI protocol implementation (from GecoSI)
 │   │   ├── crc.ts              # CRC calculator
 │   │   ├── SiMessage.ts        # Frame structure and constants
 │   │   ├── SiDataFrame.ts      # Card data parsers
@@ -96,31 +150,17 @@ ngz/
 ├── electron/
 │   ├── main.ts                 # Electron main process
 │   ├── preload.ts              # IPC bridge to renderer
-│   └── renderer/               # React UI
+│   └── renderer/               # React UI (Vite + React)
 │       └── src/
 │           ├── App.tsx          # Main app component
 │           └── App.css          # Styles
+├── .github/workflows/
+│   └── build.yml               # CI/CD: builds all platforms on tag push
 └── package.json
 ```
-
-## Troubleshooting
-
-### "No SPORTident station found"
-- Check USB connection
-- Linux: `sudo usermod -a -G dialout $USER`
-- macOS: Install CP210x driver from Silicon Labs
-
-### "Master station did not answer"
-- Verify station is in readout mode with extended protocol
-- Unplug and replug USB cable
-- Ensure no other program is using the serial port
-
-### Electron won't start
-- Make sure both `npm install` and `npm run renderer:install` completed
-- Try `npm run renderer:build` then `npm run electron:dev` separately
 
 ## Credits
 
 - SI protocol ported from [GecoSI](https://github.com/sdenier/GecoSI) by Simon Denier (MIT)
 - CRC calculator from SPORTident (CC BY 3.0)
-- Course validation inspired by [EasyGecNG](https://github.com/charliemoore00/EasyGecNG)
+- Course validation inspired by [EasyGec](https://github.com/sdenier/Geco) by Thierry Porret
