@@ -6,6 +6,7 @@
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "cli": "ts-node src/cli.ts",
     "renderer:install": "cd electron/renderer && npm install",
     "renderer:dev": "cd electron/renderer && npm run dev",

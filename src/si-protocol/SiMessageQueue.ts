@@ -65,14 +65,17 @@ export class SiMessageQueue {
     if (this.queue.length > 0) {
       return Promise.resolve(this.queue.shift()!);
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {}, 2_147_483_647); // effectively forever
       this.waiters.push({
         resolve: (msg) => {
           clearTimeout(timer);
           resolve(msg);
         },
-        reject: () => {},
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
         timer,
       });
     });

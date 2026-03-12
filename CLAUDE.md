@@ -55,6 +55,7 @@ The renderer (browser) cannot import modules that use Node.js APIs (`Buffer`, `s
 npm install                    # Root dependencies
 npm run renderer:install       # Renderer dependencies (separate package.json)
 npm test                       # Jest tests (src/)
+npm run test:coverage          # Jest with coverage report
 npm run build                  # Build renderer (Vite) + compile electron (tsc)
 npx electron-builder --win     # Build installer (win/mac/linux)
 ```
@@ -95,11 +96,19 @@ Hardcoded magic numbers in `SiDriver.ts` replaced with named constants: `BAUD_HI
 ### XML parser error logging
 `parseIofXml()` in `utils.ts` previously swallowed errors silently. Now logs parse failures to `console.error` before returning null.
 
+### Test suite expansion + coverage reporting
+Added 21 new tests across 3 new test files (49 total, up from 28):
+- `SiMessageQueue.test.ts` — push/take ordering, timeout, clear, takeForever (7 tests)
+- `si6-parsing.test.ts` — SI-Card 6 data frame parsing using real fixture data (8 tests)
+- `SiDriver.test.ts` — startup sequence, config rejection, Si5 card read, stop, chunked serial framing (6 tests)
+
+Coverage reporting via `npm run test:coverage` (jest.config.js `collectCoverageFrom`).
+
+Fixed bug in `SiMessageQueue.takeForever()`: reject handler was a no-op, preventing `stop()`/`clear()` from interrupting the driver loop.
+
 ## Remaining Cleanup Opportunities
 
 ### Lower Priority
-
-**Missing tests** - No tests for SiDriver state machine, Si6/Si8 parsing, React components, or IPC round-trips. Coverage reporting not configured.
 
 **No linting** - No ESLint or Prettier configuration.
 
