@@ -8,7 +8,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"]
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "paths": {
+      "@ngz/*": ["../../src/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../src/si-protocol/types.ts", "../../src/course-validator/validator.ts"]
 }

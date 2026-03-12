@@ -8,7 +8,7 @@
  * Original author: Thierry (EasyGec)
  */
 
-import { SiPunch, NO_TIME } from '../si-protocol/SiDataFrame';
+import { SiPunch, NO_TIME } from '../si-protocol/types';
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 

@@ -1,20 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+// ─── Shared types & validation (imported from core library) ─────────────────
+import type { SiPunch, SiCardData } from '@ngz/si-protocol/types';
+import { NO_TIME } from '@ngz/si-protocol/types';
+import type { Course, ControlResult, ValidationResult } from '@ngz/course-validator/validator';
+import { autoDetectCourse } from '@ngz/course-validator/validator';
 
-interface SiPunch { code: number; timestampMs: number; }
-interface SiCardData {
-  cardNumber: string; cardSeries: string; startTime: number; finishTime: number;
-  checkTime: number; punchCount: number; punches: SiPunch[];
-}
-interface Course { name: string; controls: number[]; isInline: boolean; useBoxStart: boolean; }
+// ─── Local types ────────────────────────────────────────────────────────────────
 interface CourseEvent { name: string; courses: Course[]; }
-interface ControlResult { expectedCode: number; found: boolean; timestampMs: number; }
-interface ValidationResult {
-  course: Course; controlResults: ControlResult[]; missingCount: number;
-  extraControls: number[]; allCorrect: boolean;
-}
 interface PortInfo { path: string; manufacturer?: string; vendorId?: string; productId?: string; isSportident: boolean; }
 interface LogEntry { time: string; direction: string; message: string; }
 interface ReadHistoryEntry {
@@ -22,7 +16,6 @@ interface ReadHistoryEntry {
   courseName: string; allCorrect: boolean; punchCount: number;
 }
 type AppScreen = 'setup' | 'waiting' | 'result' | 'log';
-const NO_TIME = -1;
 
 // ─── Built-in Animal-O Event ───────────────────────────────────────────────────
 
@@ -104,51 +97,6 @@ function parseIofXml(xmlText: string): CourseEvent | null {
   } catch { return null; }
 }
 
-// ─── Course Validation ─────────────────────────────────────────────────────────
-
-function validateInline(course: Course, punches: SiPunch[]): ValidationResult {
-  const expected = course.controls;
-  const relevant = punches.filter(p => expected.includes(p.code));
-  const m = expected.length, n = relevant.length;
-  const matrix: number[][] = [];
-  for (let i = 0; i <= m; i++) { matrix[i] = new Array(n+1); matrix[i][0] = i; }
-  for (let j = 0; j <= n; j++) matrix[0][j] = j;
-  for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) {
-    const cost = expected[i] === relevant[j].code ? 0 : 1;
-    matrix[i+1][j+1] = Math.min(1+matrix[i+1][j], 1+matrix[i][j+1], cost+matrix[i][j]);
-  }
-  const cr: ControlResult[] = [];
-  let i = 0, j = 0;
-  while (i < m && j < n) {
-    if (matrix[i+1][j+1] === matrix[i][j]) { cr.push({expectedCode:expected[i],found:true,timestampMs:relevant[j].timestampMs}); i++; j++; }
-    else if (!relevant.slice(j+1).some(p => p.code === expected[i])) { cr.push({expectedCode:expected[i],found:false,timestampMs:NO_TIME}); i++; }
-    else j++;
-  }
-  while (i < m) { cr.push({expectedCode:expected[i],found:false,timestampMs:NO_TIME}); i++; }
-  const extra = punches.filter(p => !expected.includes(p.code)).map(p => p.code);
-  const miss = cr.filter(r => !r.found).length;
-  return { course, controlResults: cr, missingCount: miss, extraControls: extra, allCorrect: miss === 0 };
-}
-function validateScoreO(course: Course, punches: SiPunch[]): ValidationResult {
-  const used = new Array(punches.length).fill(false);
-  const cr: ControlResult[] = course.controls.map(code => {
-    for (let i = 0; i < punches.length; i++) { if (!used[i] && punches[i].code === code) { used[i] = true; return {expectedCode:code,found:true,timestampMs:punches[i].timestampMs}; } }
-    return {expectedCode:code,found:false,timestampMs:NO_TIME};
-  });
-  const extra = punches.filter(p => !course.controls.includes(p.code)).map(p => p.code);
-  const miss = cr.filter(r => !r.found).length;
-  return { course, controlResults: cr, missingCount: miss, extraControls: extra, allCorrect: miss === 0 };
-}
-function autoDetectAndValidate(courses: Course[], punches: SiPunch[]): ValidationResult | null {
-  if (courses.length === 0) return null;
-  let best: ValidationResult | null = null;
-  for (const c of courses) {
-    const r = c.isInline ? validateInline(c, punches) : validateScoreO(c, punches);
-    if (!best || r.missingCount < best.missingCount || (r.missingCount === best.missingCount && r.course.controls.length > best.course.controls.length)) best = r;
-  }
-  return best;
-}
-
 // ─── Sound Effects ─────────────────────────────────────────────────────────────
 
 function playSuccessSound() {
@@ -209,7 +157,7 @@ export default function App() {
           p.timestampMs !== NO_TIME && p.timestampMs >= card.startTime
         );
       }
-      const v = activeCourses.length > 0 ? autoDetectAndValidate(activeCourses, validPunches) : null;
+      const v = activeCourses.length > 0 ? autoDetectCourse(activeCourses, validPunches) : null;
       setLastValidation(v);
       (v ? (v.allCorrect ? playSuccessSound : playErrorSound) : playSuccessSound)();
       const raceMs = (card.startTime !== NO_TIME && card.finishTime !== NO_TIME) ? card.finishTime - card.startTime : -1;

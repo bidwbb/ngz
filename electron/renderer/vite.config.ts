@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [react()],
   root: path.resolve(__dirname),
   base: './',
+  resolve: {
+    alias: {
+      '@ngz': path.resolve(__dirname, '../../src'),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

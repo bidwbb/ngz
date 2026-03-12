@@ -14,24 +14,10 @@
 
 import { SiMessage } from './SiMessage';
 
-// ─── Public types ──────────────────────────────────────────────────────────────
-
-export interface SiPunch {
-  code: number;
-  timestampMs: number; // milliseconds since midnight, or NO_TIME
-}
-
-export interface SiCardData {
-  cardNumber: string;
-  cardSeries: string;
-  startTime: number;  // ms since midnight, or NO_TIME
-  finishTime: number;
-  checkTime: number;
-  punchCount: number;
-  punches: SiPunch[];
-}
-
-export const NO_TIME = -1;
+// Re-export shared types so existing consumers are unaffected
+export { SiPunch, SiCardData, NO_TIME } from './types';
+import type { SiPunch, SiCardData } from './types';
+import { NO_TIME } from './types';
 
 // ─── Internal constants ────────────────────────────────────────────────────────
 
