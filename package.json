@@ -1,6 +1,6 @@
 {
   "name": "ngz",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SPORTident card reader with course validation for orienteering events",
   "main": "electron/dist/electron/main.js",
   "scripts": {
