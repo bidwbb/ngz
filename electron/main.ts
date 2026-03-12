@@ -12,6 +12,11 @@ import { SiDriver, CommStatus, SiPortAdapter } from '../src/si-protocol/SiDriver
 import { SiCardData } from '../src/si-protocol/SiDataFrame';
 import { listPorts, autoDetectSiPort, openPort, PortInfo } from '../src/si-protocol/SiSerial';
 import { SerialPort } from 'serialport';
+import {
+  SERIAL_LIST_PORTS, SERIAL_AUTO_DETECT,
+  DRIVER_START, DRIVER_STOP, DRIVER_STATUS, DRIVER_CARD_READ, DRIVER_LOG,
+  DIALOG_OPEN_XML,
+} from './ipc-channels';
 
 let mainWindow: BrowserWindow | null = null;
 let driver: SiDriver | null = null;
@@ -55,17 +60,17 @@ function createWindow(): void {
 // ─── IPC Handlers ──────────────────────────────────────────────────────────────
 
 /** List serial ports */
-ipcMain.handle('serial:listPorts', async (): Promise<PortInfo[]> => {
+ipcMain.handle(SERIAL_LIST_PORTS, async (): Promise<PortInfo[]> => {
   return listPorts();
 });
 
 /** Auto-detect SI station */
-ipcMain.handle('serial:autoDetect', async (): Promise<string | null> => {
+ipcMain.handle(SERIAL_AUTO_DETECT, async (): Promise<string | null> => {
   return autoDetectSiPort();
 });
 
 /** Connect to a port and start the SI driver */
-ipcMain.handle('driver:start', async (_event, portPath: string): Promise<{ success: boolean; error?: string }> => {
+ipcMain.handle(DRIVER_START, async (_event, portPath: string): Promise<{ success: boolean; error?: string }> => {
   try {
     // Stop any existing driver
     stopDriver();
@@ -83,20 +88,20 @@ ipcMain.handle('driver:start', async (_event, portPath: string): Promise<{ succe
 
     // Forward events to renderer
     driver.onStatus((status: CommStatus, msg?: string) => {
-      mainWindow?.webContents.send('driver:status', status, msg);
+      mainWindow?.webContents.send(DRIVER_STATUS, status, msg);
     });
 
     driver.onCardRead((card: SiCardData) => {
-      mainWindow?.webContents.send('driver:cardRead', card);
+      mainWindow?.webContents.send(DRIVER_CARD_READ, card);
     });
 
     driver.onLog((direction, msg) => {
-      mainWindow?.webContents.send('driver:log', direction, msg);
+      mainWindow?.webContents.send(DRIVER_LOG, direction, msg);
     });
 
     // Start the driver (async, runs forever until stopped)
     driver.start().catch((err: Error) => {
-      mainWindow?.webContents.send('driver:status', 'FATAL_ERROR', err.message);
+      mainWindow?.webContents.send(DRIVER_STATUS, 'FATAL_ERROR', err.message);
     });
 
     return { success: true };
@@ -106,12 +111,12 @@ ipcMain.handle('driver:start', async (_event, portPath: string): Promise<{ succe
 });
 
 /** Stop the driver */
-ipcMain.handle('driver:stop', async (): Promise<void> => {
+ipcMain.handle(DRIVER_STOP, async (): Promise<void> => {
   stopDriver();
 });
 
 /** Open native file dialog for IOF XML files, return file content */
-ipcMain.handle('dialog:openXml', async (): Promise<{ content: string; filename: string } | null> => {
+ipcMain.handle(DIALOG_OPEN_XML, async (): Promise<{ content: string; filename: string } | null> => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Open IOF XML Course File',

@@ -13,6 +13,7 @@ src/                          # Core library (Node.js, CommonJS)
   si-protocol/                # SPORTident protocol implementation
     types.ts                  # Shared pure types (SiPunch, SiCardData, NO_TIME)
     SiDriver.ts               # State machine for SI communication
+    SiMessageQueue.ts         # Promise-based message queue + error types
     SiDataFrame.ts            # Card data parsing (Si5, Si6, Si8+)
     SiMessage.ts              # Protocol frame construction/validation
     SiSerial.ts               # Serial port adapter/discovery
@@ -21,6 +22,7 @@ src/                          # Core library (Node.js, CommonJS)
     validator.ts              # Levenshtein inline + score-O matching
 
 electron/                     # Electron app
+  ipc-channels.ts             # IPC channel name constants (shared by main + preload)
   main.ts                     # Main process, IPC handlers
   preload.ts                  # contextBridge API
   renderer/                   # React frontend (Vite, ESM)
@@ -81,15 +83,16 @@ Monolithic 373-line `App.tsx` split into focused modules:
 - `components/` — `StatusIndicator`, `SetupScreen`, `WaitingScreen`, `ResultScreen`, `LogScreen`
 - `App.tsx` — slimmed to ~95 lines: state management, IPC listeners, header, screen routing
 
+### IPC channel constants
+IPC channel names (`driver:status`, `serial:listPorts`, etc.) extracted from hardcoded strings into `electron/ipc-channels.ts`, imported by both `main.ts` and `preload.ts`.
+
+### Extracted SiMessageQueue
+`SiMessageQueue`, `TimeoutError`, and `InvalidMessageError` moved from inline in `SiDriver.ts` to their own module `src/si-protocol/SiMessageQueue.ts`.
+
+### Named protocol constants
+Hardcoded magic numbers in `SiDriver.ts` replaced with named constants: `BAUD_HIGH`/`BAUD_LOW`, `SERIAL_BUFFER_SIZE`, `SERIAL_TIMEOUT_MS`, `RESPONSE_TIMEOUT_MS`, `CARD_REMOVAL_TIMEOUT_MS`, `PUNCHES_PER_BLOCK`.
+
 ## Remaining Cleanup Opportunities
-
-### Medium Priority
-
-**IPC channel constants** - Event names like `"driver:status"`, `"driver:cardRead"`, `"serial:listPorts"` are hardcoded strings scattered across `main.ts`, `preload.ts`, and `App.tsx`. Should be a shared constants file.
-
-**Extract SiMessageQueue** - The `SiMessageQueue` class (SiDriver.ts:68-126) and error classes (128-148) are embedded in the large SiDriver file and could be separate modules.
-
-**Hardcoded config values** - Timeouts, baud rates, and delays in `SiDriver.ts` are magic numbers (e.g., `TIMEOUT_DELAY = 500`, baud `38400`/`4800`, card removal timeout `5000`ms).
 
 ### Lower Priority
 

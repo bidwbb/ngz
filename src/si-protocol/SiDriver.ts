@@ -36,6 +36,24 @@ import {
   parseSi6,
   parseSi8Plus,
 } from './SiDataFrame';
+import { SiMessageQueue, TimeoutError, InvalidMessageError } from './SiMessageQueue';
+
+// ─── Protocol constants ─────────────────────────────────────────────────────
+
+/** Baud rate for high-speed SI stations (BSM7/8, most modern stations) */
+const BAUD_HIGH = 38400;
+/** Baud rate for legacy SI stations (BSM3/4) */
+const BAUD_LOW = 4800;
+/** Max serial frame size: STX + cmd + len(1) + data(max 128) + CRC(2) + ETX = 134, plus margin */
+const SERIAL_BUFFER_SIZE = 139;
+/** Time (ms) after which incomplete serial data is discarded */
+const SERIAL_TIMEOUT_MS = 500;
+/** Default timeout (ms) for waiting for a protocol response */
+const RESPONSE_TIMEOUT_MS = 2000;
+/** Timeout (ms) for waiting for the user to remove the card from the station */
+const CARD_REMOVAL_TIMEOUT_MS = 5000;
+/** Number of punches that fit in a single data block (SI-Card 6+) */
+const PUNCHES_PER_BLOCK = 32;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,90 +81,6 @@ export interface SiDriverEvents {
   log: (direction: 'SEND' | 'READ' | 'INFO' | 'ERROR', msg: string) => void;
 }
 
-// ─── Message queue with timeout ────────────────────────────────────────────────
-
-class SiMessageQueue {
-  private queue: SiMessage[] = [];
-  private waiters: Array<{
-    resolve: (msg: SiMessage) => void;
-    reject: (err: Error) => void;
-    timer: NodeJS.Timeout;
-  }> = [];
-
-  push(msg: SiMessage): void {
-    if (this.waiters.length > 0) {
-      const waiter = this.waiters.shift()!;
-      clearTimeout(waiter.timer);
-      waiter.resolve(msg);
-    } else {
-      this.queue.push(msg);
-    }
-  }
-
-  take(timeoutMs: number = 2000): Promise<SiMessage> {
-    if (this.queue.length > 0) {
-      return Promise.resolve(this.queue.shift()!);
-    }
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const idx = this.waiters.findIndex((w) => w.timer === timer);
-        if (idx >= 0) this.waiters.splice(idx, 1);
-        reject(new TimeoutError('Message timeout'));
-      }, timeoutMs);
-      this.waiters.push({ resolve, reject, timer });
-    });
-  }
-
-  /** Wait indefinitely for the next message */
-  takeForever(): Promise<SiMessage> {
-    if (this.queue.length > 0) {
-      return Promise.resolve(this.queue.shift()!);
-    }
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {}, 2_147_483_647); // effectively forever
-      this.waiters.push({
-        resolve: (msg) => {
-          clearTimeout(timer);
-          resolve(msg);
-        },
-        reject: () => {},
-        timer,
-      });
-    });
-  }
-
-  clear(): void {
-    for (const w of this.waiters) {
-      clearTimeout(w.timer);
-      w.reject(new Error('Queue cleared'));
-    }
-    this.waiters = [];
-    this.queue = [];
-  }
-}
-
-class TimeoutError extends Error {
-  constructor(msg: string) {
-    super(msg);
-    this.name = 'TimeoutError';
-  }
-}
-
-class InvalidMessageError extends Error {
-  constructor(
-    public readonly receivedMessage: SiMessage,
-    expectedCommand?: number
-  ) {
-    super(
-      `Invalid message: got ${receivedMessage.toString()}` +
-        (expectedCommand !== undefined
-          ? ` (expected command 0x${expectedCommand.toString(16)})`
-          : '')
-    );
-    this.name = 'InvalidMessageError';
-  }
-}
-
 // ─── Protocol config check masks ───────────────────────────────────────────────
 
 const EXTENDED_PROTOCOL_MASK = 1;
@@ -163,10 +97,9 @@ export class SiDriver extends EventEmitter {
   private si6_192PunchesMode = false;
 
   // Accumulator for serial framing
-  private accBuffer = Buffer.alloc(139);
+  private accBuffer = Buffer.alloc(SERIAL_BUFFER_SIZE);
   private accSize = 0;
   private lastDataTime = 0;
-  private readonly TIMEOUT_DELAY = 500;
 
   constructor(port: SiPortAdapter, zerohour: number = 0) {
     super();
@@ -193,14 +126,14 @@ export class SiDriver extends EventEmitter {
   /** Feed raw serial bytes into the driver (called by the serial port adapter) */
   handleSerialData(chunk: Buffer): void {
     const now = Date.now();
-    if (now > this.lastDataTime + this.TIMEOUT_DELAY) {
+    if (now > this.lastDataTime + SERIAL_TIMEOUT_MS) {
       this.accSize = 0; // reset on timeout
     }
     this.lastDataTime = now;
 
     // Accumulate
-    chunk.copy(this.accBuffer, this.accSize, 0, Math.min(chunk.length, 139 - this.accSize));
-    this.accSize += Math.min(chunk.length, 139 - this.accSize);
+    chunk.copy(this.accBuffer, this.accSize, 0, Math.min(chunk.length, SERIAL_BUFFER_SIZE - this.accSize));
+    this.accSize += Math.min(chunk.length, SERIAL_BUFFER_SIZE - this.accSize);
 
     // Check if single-byte message (like ACK)
     if (this.accSize === 1 && this.accBuffer[0] !== 0x02) {
@@ -233,7 +166,7 @@ export class SiDriver extends EventEmitter {
     await this.port.write(msg.sequence);
   }
 
-  private async pollAnswer(command: number, timeoutMs = 2000): Promise<SiMessage> {
+  private async pollAnswer(command: number, timeoutMs = RESPONSE_TIMEOUT_MS): Promise<SiMessage> {
     const msg = await this.messageQueue.take(timeoutMs);
     if (!msg.check(command)) {
       throw new InvalidMessageError(msg, command);
@@ -282,12 +215,12 @@ export class SiDriver extends EventEmitter {
   private async startupBootstrap(): Promise<void> {
     // Try high speed first (38400), fall back to low (4800)
     try {
-      await this.port.setBaudRate(38400);
+      await this.port.setBaudRate(BAUD_HIGH);
       await this.startup();
     } catch (err) {
       if (err instanceof TimeoutError) {
         try {
-          await this.port.setBaudRate(4800);
+          await this.port.setBaudRate(BAUD_LOW);
           await this.startup();
         } catch (err2) {
           if (err2 instanceof TimeoutError) {
@@ -471,7 +404,7 @@ export class SiDriver extends EventEmitter {
 
     // Determine how many blocks we need
     const nbPunches = firstBlock.byteAt(nbPunchesIndex) & 0xff;
-    const punchesPerBlock = 32;
+    const punchesPerBlock = PUNCHES_PER_BLOCK;
     const nbPunchDataBlocks =
       Math.floor(nbPunches / punchesPerBlock) +
       Math.min(1, nbPunches % punchesPerBlock);
@@ -496,7 +429,7 @@ export class SiDriver extends EventEmitter {
   private async ackAndWaitRemoval(): Promise<void> {
     await this.send(ACK_SEQUENCE);
     try {
-      const msg = await this.messageQueue.take(5000); // 5s timeout for removal
+      const msg = await this.messageQueue.take(CARD_REMOVAL_TIMEOUT_MS);
       if (msg.commandByte !== SI_CARD_REMOVED) {
         this.log('INFO', `Expected card removal, got: ${msg.toString()}`);
       }

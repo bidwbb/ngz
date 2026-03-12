@@ -3,6 +3,11 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
+import {
+  SERIAL_LIST_PORTS, SERIAL_AUTO_DETECT,
+  DRIVER_START, DRIVER_STOP, DRIVER_STATUS, DRIVER_CARD_READ, DRIVER_LOG,
+  DIALOG_OPEN_XML,
+} from './ipc-channels';
 
 export interface ElectronAPI {
   // Serial port
@@ -26,27 +31,27 @@ export interface ElectronAPI {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  listPorts: () => ipcRenderer.invoke('serial:listPorts'),
-  autoDetect: () => ipcRenderer.invoke('serial:autoDetect'),
+  listPorts: () => ipcRenderer.invoke(SERIAL_LIST_PORTS),
+  autoDetect: () => ipcRenderer.invoke(SERIAL_AUTO_DETECT),
 
-  startDriver: (portPath: string) => ipcRenderer.invoke('driver:start', portPath),
-  stopDriver: () => ipcRenderer.invoke('driver:stop'),
+  startDriver: (portPath: string) => ipcRenderer.invoke(DRIVER_START, portPath),
+  stopDriver: () => ipcRenderer.invoke(DRIVER_STOP),
 
-  openXmlDialog: () => ipcRenderer.invoke('dialog:openXml'),
+  openXmlDialog: () => ipcRenderer.invoke(DIALOG_OPEN_XML),
 
   onStatus: (callback: (status: string, msg?: string) => void) => {
-    ipcRenderer.on('driver:status', (_event, status, msg) => callback(status, msg));
+    ipcRenderer.on(DRIVER_STATUS, (_event, status, msg) => callback(status, msg));
   },
   onCardRead: (callback: (card: any) => void) => {
-    ipcRenderer.on('driver:cardRead', (_event, card) => callback(card));
+    ipcRenderer.on(DRIVER_CARD_READ, (_event, card) => callback(card));
   },
   onLog: (callback: (direction: string, msg: string) => void) => {
-    ipcRenderer.on('driver:log', (_event, direction, msg) => callback(direction, msg));
+    ipcRenderer.on(DRIVER_LOG, (_event, direction, msg) => callback(direction, msg));
   },
 
   removeAllListeners: () => {
-    ipcRenderer.removeAllListeners('driver:status');
-    ipcRenderer.removeAllListeners('driver:cardRead');
-    ipcRenderer.removeAllListeners('driver:log');
+    ipcRenderer.removeAllListeners(DRIVER_STATUS);
+    ipcRenderer.removeAllListeners(DRIVER_CARD_READ);
+    ipcRenderer.removeAllListeners(DRIVER_LOG);
   },
 } as ElectronAPI);
