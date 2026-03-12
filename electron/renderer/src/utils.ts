@@ -79,7 +79,10 @@ export function parseIofXml(xmlText: string): CourseEvent | null {
       if (controls.length > 0) courses.push({ name, controls, isInline: true, useBoxStart: true });
     }
     return courses.length > 0 ? { name: eventName, courses } : null;
-  } catch { return null; }
+  } catch (err) {
+    console.error('Failed to parse IOF XML:', err);
+    return null;
+  }
 }
 
 // ─── Sound Effects ─────────────────────────────────────────────────────────────

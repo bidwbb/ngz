@@ -92,11 +92,12 @@ IPC channel names (`driver:status`, `serial:listPorts`, etc.) extracted from har
 ### Named protocol constants
 Hardcoded magic numbers in `SiDriver.ts` replaced with named constants: `BAUD_HIGH`/`BAUD_LOW`, `SERIAL_BUFFER_SIZE`, `SERIAL_TIMEOUT_MS`, `RESPONSE_TIMEOUT_MS`, `CARD_REMOVAL_TIMEOUT_MS`, `PUNCHES_PER_BLOCK`.
 
+### XML parser error logging
+`parseIofXml()` in `utils.ts` previously swallowed errors silently. Now logs parse failures to `console.error` before returning null.
+
 ## Remaining Cleanup Opportunities
 
 ### Lower Priority
-
-**Silent error swallowing** - `App.tsx` XML parser catches errors and returns null silently. Consider logging the error.
 
 **Missing tests** - No tests for SiDriver state machine, Si6/Si8 parsing, React components, or IPC round-trips. Coverage reporting not configured.
 
