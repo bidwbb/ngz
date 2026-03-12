@@ -24,9 +24,18 @@ electron/                     # Electron app
   main.ts                     # Main process, IPC handlers
   preload.ts                  # contextBridge API
   renderer/                   # React frontend (Vite, ESM)
-    src/App.tsx               # Single-component UI
-    src/App.css               # All styles
     vite.config.ts            # Vite config with @ngz alias
+    src/
+      App.tsx                 # Orchestrator: state, IPC listeners, header, routing
+      App.css                 # All styles
+      types.ts                # Local types + re-exports from @ngz
+      utils.ts                # API facade, formatters, XML parser, sounds, event data
+      components/
+        StatusIndicator.tsx   # Connection status dot + label
+        SetupScreen.tsx       # Port selection + event management (includes NewEventForm)
+        WaitingScreen.tsx     # "Insert card" waiting screen
+        ResultScreen.tsx      # Card read result with validation details
+        LogScreen.tsx         # Read history + protocol log tabs
 ```
 
 ### Import Boundaries
@@ -65,14 +74,14 @@ Previously, `SiPunch`, `SiCardData`, `Course`, `ControlResult`, `ValidationResul
 ### Eliminated validation logic duplication
 Previously, `validateInline()`, `validateScoreO()`, and `autoDetectAndValidate()` were reimplemented in `App.tsx` (~40 lines) duplicating the canonical versions in `validator.ts` (~210 lines). The App now imports `autoDetectCourse()` from the validator module.
 
+### Split App.tsx into components
+Monolithic 373-line `App.tsx` split into focused modules:
+- `types.ts` — local types + re-exports from `@ngz/` (single import source for components)
+- `utils.ts` — API facade, formatters, XML parser, sounds, built-in event data
+- `components/` — `StatusIndicator`, `SetupScreen`, `WaitingScreen`, `ResultScreen`, `LogScreen`
+- `App.tsx` — slimmed to ~95 lines: state management, IPC listeners, header, screen routing
+
 ## Remaining Cleanup Opportunities
-
-### High Priority
-
-**Split App.tsx into components** - Currently 380+ lines with 7 screen components, XML parser, sound effects, and time formatters all in one file. Suggested structure:
-- `SetupScreen.tsx`, `WaitingScreen.tsx`, `ResultScreen.tsx`, `LogScreen.tsx`
-- `hooks/useSerialPort.ts`, `hooks/useDriver.ts`
-- `utils/formatters.ts`, `utils/sounds.ts`, `utils/xmlParser.ts`
 
 ### Medium Priority
 
