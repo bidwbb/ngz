@@ -62,6 +62,7 @@ npx electron-builder --win     # Build installer (win/mac/linux)
 
 ## Conventions
 
+- When a new release is made, update `README.md` with the latest version numbers (download filenames, etc.)
 - TypeScript strict mode everywhere
 - Core library in `src/` compiled as CommonJS (for Electron main process)
 - Renderer uses Vite + React with ESM

@@ -8,9 +8,9 @@ A desktop app for reading SPORTident cards at orienteering events. Shows a full-
 
 Go to the [Releases](https://github.com/bidwbb/ngz/releases) page and download the right file for your computer:
 
-- **Windows**: `NGZ Setup 0.1.0.exe` (installer) or `NGZ 0.1.0.exe` (portable, no install needed)
-- **macOS**: `NGZ-0.1.0.dmg`
-- **Linux**: `NGZ-0.1.0.AppImage`
+- **Windows**: `NGZ Setup 0.1.1.exe` (installer) or `NGZ 0.1.1.exe` (portable, no install needed)
+- **macOS**: `NGZ-0.1.1.dmg`
+- **Linux**: `NGZ-0.1.1.AppImage`
 
 ### 2. Install the USB Driver
 
