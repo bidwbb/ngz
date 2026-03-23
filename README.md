@@ -78,6 +78,18 @@ SiCard 5, 6, 6*, 8, 9, 10, 11, SIAC (including 192-punch mode)
 
 ## Troubleshooting
 
+### Windows: CP210x driver installed but station not appearing under Ports
+After installing the CP210x driver and plugging in the SPORTident station, it may appear under **Other devices** as "SPORTident USB to UART Bridge Controller" with a warning icon instead of under **Ports (COM & LPT)**. To fix this, force Windows to use the CP210x driver:
+
+1. In Device Manager, right-click **SPORTident USB to UART Bridge Controller** → **Update driver**
+2. Choose **Browse my computer for drivers**
+3. Choose **Let me pick from a list of available drivers on my computer**
+4. In the device type list, select **Ports (COM & LPT)** → Next
+5. On the left (Manufacturer), select **Silicon Labs**
+6. On the right, select **Silicon Labs CP210x USB to UART Bridge** → Next
+
+The device should now appear under **Ports (COM & LPT)** with a COM port number.
+
 ### "No SPORTident station found"
 - Check USB connection and make sure the CP210x driver is installed
 - Try unplugging and replugging the USB cable
