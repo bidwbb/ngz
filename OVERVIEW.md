@@ -21,7 +21,29 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
 - **Extra and repeated punches are fine.** They never make a run fail. They may be shown as information.
 - **Card punch order beats station timestamps.** Correctness comes from the order punches are stored on the card. Timestamps are only for showing times and for spotting old punches on uncleared cards, with a tolerance. Station clocks are often out of sync.
 - **Missing start or finish:** if the controls are right, the child still gets the **happy face**. The screen also says we can't give a time: _"We can't give you a time because you didn't punch Start"_ (or Finish, or both). This is a "no time" flag, not a failure state.
-- **Backwards:** if the run doesn't match any course forwards but is a perfect match for a course in reverse, the screen says so (_"You did Lion backwards!"_), but it is still a **sad face**. Other wrong-order runs get "right animals, wrong order" when nothing is missing.
+- **Out of order on an inline course: fail (sad face), with a label.**
+  - **"Shuffle"** ("right animals, wrong order") when every control was found but not in order.
+  - **"Backwards"** (_"You did Lion backwards!"_) when the run doesn't match any course forwards but is a match for a course in reverse.
+- **Old punches on an uncleared card are removed, using the card's punch order rather than times** (see "Uncleared cards" below for how, and one limitation).
+- **Organizer notes:** shown small on the result screen and in the log, not as part of the child's verdict.
+  - **"Station clocks look out of sync — please synchronize the controls"** when the punches are in the right order by card order but their timestamps are out of order.
+  - **"Please clear your card before your next run"** when the card holds punches from an earlier run.
+- **How an SI card stores a run** (background for the next point):
+  - **Punches** go into a list, in the order they were made. Each one records the control code and the time from *that control's* clock.
+  - **Start and finish** go into their own two slots, not into the list. Only the latest of each is kept: punching Start again overwrites the earlier start.
+  - **Clear and check** stations reset the card and record their own times. An uncleared card keeps its old punches, and new ones are added after them.
+- **Uncleared cards: how to drop old punches "by order".**
+  - *The limitation:* an SI card stores the start and finish punches in their own slots, not in the punch list. It keeps only the latest start and the latest finish (punching Start again overwrites the old one). So the card itself doesn't record *where* in the punch sequence the start happened, or how many starts there were. Neither "more than one start or finish" nor a pure order-only window can be read off the card directly.
+  - *Proposed method (order-based, with one time comparison):*
+    - Walk the punches in card order and find the **first punch at or after the start time** (minus a tolerance of a few minutes for clock drift).
+    - Everything from that punch on is this run, used in card order. Everything before it is an earlier run and is dropped.
+    - The finish time is not used to trim anything.
+    - Time is used only once, to find that boundary. Clock drift elsewhere can't drop a real punch.
+  - *If there's no start punch:* use all punches and match against the **latest** occurrences of each code.
+  - *The "clear your card" note* appears whenever punches were dropped as an earlier run. That is the practical equivalent of "more than one start": it's what an uncleared card looks like.
+  - **The child still gets a result** (decided 2026-11-19): grade our best guess of the run they just did (the punches after the boundary), and show the "please clear your card" note alongside it.
+  - **How this differs from NGZ today:** NGZ's `App.tsx` checks *each* punch's time against both the start and the finish time. A control whose clock is a little behind the start clock, or ahead of the finish clock, gets dropped as if it were old. The proposal uses time once, to find the boundary, keeps everything after it in card order, and never trims at the finish.
+  - *Extra check:* if the remaining punches contain the same course twice, show the same note.
 - **No matching course:** when the best match is too weak, show a neutral "We couldn't tell which course you did" screen, list the punches, and let the organizer pick a course from a dropdown.
   - **Recommendation: require at least half the course found in order (3 of 5, 5 of 10), not 40%.** 40% of a 5-control course is 2 controls.
   - A quick simulation: 5 random punches from 31–40, scored against the six 5-control Animal-O courses, *always* match at least 2 of 5 in order on some course, and 54% of the time match 3 of 5.
@@ -34,24 +56,31 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
   - Course names can collide across sets ("Lion" in both), so show the set name on the result and in the regrade dropdown.
   - Sets on different controls (31–40 vs 41–50) don't interfere.
 - **Built-in default course sets** that can be switched on and off (an EasySnec-style toggle):
-  1. **New Animal-O, 31–40**
-  2. **New Animal-O, 41–50**
-  3. **Old Animal-O**
-  4. **Basketball-O** (probably the same in new and old)
-- **Data needed from Barb.** I found two different Animal-O sets and no Basketball-O codes anywhere (`curriculum` and `website` repos included):
-  - **Set A** (NGZ and EasySnec, "Cambridge Plays", 31–40 only, matching the teaching kit's "six 5-animal + 10-animal" clue sheets):
+  1. **New Animal-O** = Set A below (31–40)
+  2. **Old Animal-O** = Set B below (31–40 and 41–50)
+  3. **Basketball-O** (probably the same in new and old). **Codes still needed:** I found none in any repo, including `curriculum` and `website`.
+  4. **Score-O 31–40** (all ten controls)
+- **Confirmed 2026-11-19:** Set A is the **new** animal courses; Set B is the **old**, original animal courses.
+  - Several animal names (Lion, Dog, Elephant, Frog, Sheep) appear in both sets with different controls. With both sets on, show the set name ("New: Lion" / "Old: Lion").
+  - Still open: is there a **new Animal-O on 41–50** (e.g. Set A shifted by 10)?
+- **The two Animal-O sets:**
+  - **Set A — new** (NGZ and EasySnec, "Cambridge Plays", 31–40 only, matching the teaching kit's "six 5-animal + 10-animal" clue sheets):
     - fives: Lion 31 33 36 38 39 · Dog 33 32 40 38 34 · Bee 35 37 38 40 33 · Bird/Blue Jay 36 34 31 38 37 · Elephant 37 34 31 40 39 · Crab 39 31 32 35 37
     - tens: Frog · Octopus · Penguin · Sheep
-  - **Set B** (EasyGecNG `data/Animal-O_31-40 & 41-50.egc`, mirrored on 41–50):
+  - **Set B — old** (EasyGecNG `data/Animal-O_31-40 & 41-50.egc`, mirrored on 41–50):
     - fives: Lion, Frog, Turtle, Sheep, Tiger, Fish
     - tens: Lion (31–40 in order), Dog, Pig, Elephant, Frog, Sheep, Tiger
     - two score courses that include one stray code from the other block (score 31–40 contains 42; score 41–50 contains 32). Probably a data-entry slip.
-  - Which is "new" and which is "old"? Is new Animal-O on 41–50 the same courses shifted by 10?
   - Course data should live in **one JSON (or IOF XML) file per course set**, shared by whichever app we keep.
 
 ### Course types in the UI
 - **Inline** (default), **Score-O** and **Poison-O** should all be selectable.
-- **Score-O with different point values per control.** The NGZ v0.1.1 release notes list this as a requirement to confirm. None of the three apps supports it today. Is it still wanted?
+- **Score-O with different point values per control: wanted** (confirmed 2026-11-19). None of the three apps supports it today. Each control in a Score-O course gets a point value (default 1); the score is the sum for distinct controls found.
+- **More course types will come.** Design for it:
+  - each course has a `type` plus type-specific settings (point values, poison list, time limit, …)
+  - grading goes through one grader per type, registered in a table, so adding a type doesn't touch the others
+  - **shared building blocks:** the types will share a lot of checking logic (cleaning old punches, matching punches to controls in order or as a set, mistake labels like missing/extra/shuffle, time calculations). Factor these into common helpers that each type's grader combines, rather than one big grader with a switch. Exactly where to draw the lines can be decided when the second and third types are built.
+  - each type gets its own shared test cases
 - **Poison-O**, as defined in the curriculum: safe controls are those on the runner's map; any other control in the event is poison.
   - Proposed scoring: safe controls found − poison controls punched.
   - The face is happy if the run is all safe and every safe control was found. Otherwise "you found N, punched M poison".
@@ -163,6 +192,7 @@ These are the places where the three programs disagree or where a choice was mad
 | Do extra punches (controls not on the course) make the run fail? | No | **Yes** (exact list match) | No |
 | Do repeated punches make the run fail? | No | **Yes** for inline courses (score-O ignores repeats) | No |
 | Out of order on an inline course? | Fails (PM) | Fails, labeled "shuffle" when nothing is missing | Fails (PM) |
+| **Desired** (decided) | | | Fail, labeled "shuffle" when nothing is missing, or "backwards" for a course done in reverse |
 | Missing start or finish punch? | Separate "late" face and caption | `INCOMPLETE` status with its own face | **Ignored.** A run can show a happy face with no finish punch |
 | Old punches on an uncleared card? | Not handled as far as I can tell | Not handled. With exact matching, old punches cause a failure | Removed using the start–finish window |
 | Score-O | Supported | Supported in code, unreachable in the UI | Supported in the validator, unreachable in the UI (every course is created inline) |
@@ -175,9 +205,7 @@ These are the places where the three programs disagree or where a choice was mad
 - Fix: keep the filter only for its real job (old punches from an earlier run). Give it a tolerance of several minutes, don't trim against the finish time at all, and use times only for showing race time and splits.
 - The trade-off: on an uncleared card with badly drifted clocks, an old run's punches could slip through. Matching against the *latest* occurrences of each code reduces that risk. Clearing cards removes it.
 
-**Still to decide:**
-- (b) Is a missing start or finish a third result state? EasyGec and EasySnec say yes, NGZ says no. NGZ should probably add it.
-- (c) Should "right controls, wrong order" get a gentler message than "missed controls"? EasySnec's swap detection is a nice idea.
+**Since decided (see §0):** a missing start or finish keeps the happy face when the controls are right, plus a "no time" note. Wrong order is a fail labeled "shuffle" or "backwards". Old punches are dropped using card order, with one time comparison to find where this run starts.
 
 ### 2.2 Course auto-detection
 - EasyGec and NGZ pick the course with the fewest missing controls, and NGZ breaks ties by preferring the longer course. EasySnec ranks raw edit distance, so extra punches affect which course it picks.
@@ -299,14 +327,14 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 ## 5. Open questions for Barb
 1. Which app should be the main product, and who maintains it in 2027? (See §6.)
 2. ~~Should extra or doubled punches ever make a child's result sad?~~ **Decided: no** (except Poison-O).
-3. Which Animal-O set is "new" and which is "old" (§0)? Can you send the Basketball-O codes?
+3. ~~Which Animal-O set is new and which is old?~~ **Answered:** Set A new, Set B old. Still needed: the **Basketball-O codes**, and whether there's a **new Animal-O on 41–50**.
 4. Which EasyGecNG features are truly needed: runner names, rankings, exports, ABC, UNSS, other languages?
 5. Is Electron's size acceptable on the laptops used at events?
 6. Should course sets come from the website, and in what format? IOF XML is the obvious choice.
 7. What threshold feels right for "couldn't tell which course"? I recommend at least half, configurable.
 8. Is the Poison-O scoring in §0 right? Does a Poison-O event have one list of all controls?
 9. **Do the schools and teachers we serve use Chromebooks, or locked-down laptops where they can't install software?** This decides whether a browser version is needed (§6.5).
-10. Is **Score-O with different point values per control** (from the v0.1.1 release notes) still wanted?
+10. ~~Is Score-O with different point values per control still wanted?~~ **Answered: yes.** What point values do the current Score-O maps use?
 11. Would the tech dev team rather stay in Python? If so, and a browser is needed, are they open to Python in the browser (Pyodide), or to TypeScript?
 
 ---
@@ -315,17 +343,17 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 
 ### 6.1 Platform reach
 
-| | EasySnec (Python + Slint, Nuitka) | NGZ today (Electron) | **Web app (TypeScript, built from NGZ's core)** | EasyGecNG (Java 8) |
-|---|---|---|---|---|
-| Windows | ✅ unsigned exe | ✅ unsigned installer/portable | ✅ Chrome/Edge | ✅ needs Java |
-| macOS | ✅ Apple Silicon only (no Intel build yet) | ⚠️ arm64 DMG only. **The v0.1.1 release notes say it does not work on Macs yet** | ✅ Chrome/Edge | ✅ needs Java |
-| Linux | ✅ | ✅ AppImage | ✅ Chrome/Chromium | ✅ |
-| **Chromebook** (common in schools) | ❌ | ❌ | **✅ Web Serial works on ChromeOS** | ❌ |
-| **Android** tablet/phone + USB-OTG | ❌ (Slint's Android support is for Rust/C++, not Python) | ❌ | ⚠️ Possible. Web Serial reached Chrome **beta** for Android in April 2026 (v148). The other route is WebUSB plus a JavaScript CP210x driver, which already exists in open-source projects. Needs testing on real devices | ❌ |
-| iPad / iPhone | ❌ | ❌ | ❌ (Safari has neither Web Serial nor WebUSB) | ❌ |
-| Firefox / Safari on desktop | n/a | n/a | ❌ (Chromium-based browsers only) | n/a |
+| | EasySnec (Python + Slint, Nuitka) | NGZ today (Electron) | **Web app (TypeScript, built from NGZ's core)** | **Web app (Python via Pyodide, built from EasySnec's core)** | EasyGecNG (Java 8) |
+|---|---|---|---|---|---|
+| Windows | ✅ unsigned exe | ✅ unsigned installer/portable | ✅ Chrome/Edge | ✅ Chrome/Edge | ✅ needs Java |
+| macOS | ✅ Apple Silicon only (no Intel build yet) | ⚠️ arm64 DMG only. **The v0.1.1 release notes say it does not work on Macs yet** | ✅ Chrome/Edge | ✅ Chrome/Edge | ✅ needs Java |
+| Linux | ✅ | ✅ AppImage | ✅ Chrome/Chromium | ✅ Chrome/Chromium | ✅ |
+| **Chromebook** (common in schools) | ❌ | ❌ | **✅ Web Serial works on ChromeOS** | ✅ same as TypeScript; slower start on low-end Chromebooks | ❌ |
+| **Android** tablet/phone + USB-OTG | ❌ (Slint's Android support is for Rust/C++, not Python) | ❌ | ⚠️ Possible. Web Serial reached Chrome **beta** for Android in April 2026 (v148). The other route is WebUSB plus a JavaScript CP210x driver, which already exists in open-source projects. Needs testing on real devices | ⚠️ Same as TypeScript, plus a heavier runtime on low-end tablets | ❌ |
+| iPad / iPhone | ❌ | ❌ | ❌ (Safari has neither Web Serial nor WebUSB) | ❌ | ❌ |
+| Firefox / Safari on desktop | n/a | n/a | ❌ (Chromium-based browsers only) | ❌ | n/a |
 
-The USB driver situation is the same for every option. Windows needs the CP210x driver; macOS, Linux and ChromeOS generally have it built in.
+Python-in-the-browser notes: the first download is several MB for the Python runtime (cached afterwards), startup takes a few seconds, and the SI reading layer must be rewritten as async Web Serial code (see §6.5). The USB driver situation is the same for every option. Windows needs the Silicon Labs CP210x driver (Windows Update often installs it). Linux and ChromeOS include it. **macOS: NGZ's README tells users to install the Silicon Labs driver; whether current macOS works without it is unverified.** Test this, because on a school-managed Mac a driver install needs IT, whatever app we choose.
 
 **Why not Firefox or Safari?** Web Serial and WebUSB were designed by Google and so far ship only in Chromium-based browsers (Chrome, Edge, Opera, Brave, ChromeOS). Mozilla and Apple have declined to ship them, mainly over security and privacy concerns (websites talking to hardware, fingerprinting). It's a policy choice, not a technical limit. On iPhone and iPad, Apple requires every browser to use Safari's engine, so Chrome there can't do it either.
 
@@ -447,6 +475,52 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 - **The same browser limits apply:** Chrome/Edge only, no iOS, Android unproven.
 - **Verdict:** a legitimate option if the tech dev team strongly wants to stay in Python *and* browser reach is required. It costs more than TypeScript to build and debug, but it keeps the language. Worth a small prototype before committing. Sources: [serialx Pyodide backend](https://puddly.github.io/serialx/how-to/pyodide.html), [Pyodide deployment docs](https://pyodide.readthedocs.io/en/latest/usage/downloading-and-deploying.html), [Pyodide 314.0 release notes](https://blog.pyodide.org/posts/314-release/).
 
+**Will schools have a Chromium browser?** Most machines will, but not all:
+- **Chromebooks:** always (Chrome).
+- **Windows 10/11:** always. Microsoft Edge is Chromium-based and built in, even if IT sets another default browser.
+- **Macs:** ship with Safari only. Chrome or Edge must be installed, which school-managed Macs may block.
+- **iPads:** never usable (no USB serial at all).
+- **Locked-down devices:** IT can disable Web Serial or USB devices by policy in Chrome and Edge. Also, on Windows the station's CP210x driver may need admin rights to install. That applies to *every* option, not just the web app.
+- **Who owns the laptop matters most.** A Navigation Games or teacher-owned laptop is easy; a school IT-managed one may not be. Worth finding out which is typical.
+
+**Maintaining a web and a desktop version: yes, as one app with two "shells", not two apps.**
+- The core (protocol, grading, course data) and the UI are shared. Only the thin layer that talks to the serial port differs.
+- **TypeScript:**
+  - Web shell: Web Serial in Chrome/Edge.
+  - Desktop shell: Electron (bundles its own Chromium, so it works on a Mac with only Safari) using Node's `serialport`. NGZ already has this adapter.
+  - Or Tauri for smaller installers, with a Rust serial plugin.
+- **Python:**
+  - Web shell: Pyodide with Web Serial.
+  - Desktop shell: pywebview with `pyserial`/`sportident`.
+  - Both share the Python core and the same HTML UI.
+- **What the desktop shell brings back:** installers, signing and per-OS builds, but only for that version, and only if real users need it.
+- **Suggested approach:** launch web-first, keep the serial layer behind a small adapter interface from day one, and add the desktop shell only if real users can't use Chrome or Edge.
+
+**Warnings and approvals on school devices**
+- **A web app gets no Gatekeeper, SmartScreen or antivirus install warnings, in TypeScript or Python.** Those checks apply to downloaded programs, and a web app isn't one. Pyodide is WebAssembly running inside the browser's sandbox, so it's treated like any other web page.
+- **The web equivalents of those hurdles:**
+  - *School web filters* (e.g. GoGuardian, Securly, Lightspeed) can block unfamiliar sites. Host on a reputable domain (the Navigation Games site), serve everything, including Pyodide's files, from that same domain rather than a third-party CDN, and give IT the domain to allowlist.
+  - *Browser policies:* IT can turn off Web Serial or app installs. Chrome and Edge have admin policies to allow Web Serial for one named site.
+  - *The USB driver* (Windows, possibly Mac) may need admin rights: the same for every option.
+
+**Locked-down school Macs with only Safari.** Safari can't do it, so the choice is how to get a Chromium browser or another device:
+1. **Best: ask IT to install Chrome or Edge, then use the web app.** Many school Macs already have Chrome for Google Workspace. Installing a well-known browser is an easy, routine IT request.
+2. **A desktop app (Electron/pywebview) doesn't avoid IT.** Managed Macs usually block installing apps, and unsigned ones entirely. A signed app still needs IT to deploy it. It's the same request as installing Chrome, but for an unfamiliar app, so a harder sell.
+3. **Use a different device for the readout:** a school Chromebook or Windows laptop (Edge built in), or a Navigation Games loaner.
+4. **Prepare an "IT one-pager" for schools:**
+   - which domain to allowlist
+   - allow Web Serial for that site
+   - install the CP210x driver if needed
+   - on Macs, install Chrome or Edge
+
+**When would the desktop shell actually be needed?** Since teachers use school devices, rarely:
+- the device has no Chrome/Edge, and IT will install our app but not a browser (unusual)
+- IT blocks Web Serial in the browser but permits a desktop app
+- a Linux machine with only Firefox
+- a site where the device can never get online, not even once to install the web app
+
+In most cases, getting a desktop app approved takes the same IT effort as getting Chrome installed. So **start web-only**, keep the serial adapter separate so a desktop shell stays cheap to add, and build it only if these cases show up in practice.
+
 ### 6.6 Technology options, pros and cons
 
 | Option | Download size | Platforms | Pros | Cons |
@@ -469,6 +543,22 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 | **Windows** | 1. Get a certificate. Easiest: Microsoft's cloud signing service, **Trusted Signing** (recently renamed Artifact Signing). Navigation Games verifies as an organization. The alternative is an OV certificate from DigiCert, Sectigo etc., whose key must live on a hardware token or cloud HSM. 2. Add the Trusted Signing GitHub Action (or electron-builder's `azureSignOptions`) to the release workflow. 3. Expect SmartScreen to still warn until the app builds download reputation. | ~$10/month (Trusted Signing), or ~$200–500/year (vendor certificate) |
 | **macOS** | 1. Enroll Navigation Games in the **Apple Developer Program** (a fee waiver exists for some nonprofits). 2. Create a **Developer ID Application** certificate. 3. Store the certificate (as a .p12) and an App Store Connect API key as GitHub secrets. 4. electron-builder signs and **notarizes** automatically when `CSC_LINK`, `CSC_KEY_PASSWORD` and the `APPLE_API_KEY*` variables are set. For Nuitka, use `codesign` + `xcrun notarytool submit` + `xcrun stapler staple`. 5. Build both arm64 and x64 (or universal) so Intel Macs work. | $99/year |
 | **Linux** | Not expected for AppImage | — |
+
+**How easy is it for NGZ vs EasySnec?**
+- **The slow part is the same for both, and it's paperwork, not code.** Allow a few weeks:
+  - Navigation Games enrolls in the Apple Developer Program as an organization, which needs a free D-U-N-S number first.
+  - Microsoft verifies the organization's identity for Trusted Signing.
+  - Someone at Navigation Games owns these accounts and renews them yearly.
+- **NGZ (Electron): easy once the accounts exist.** electron-builder has built-in Windows signing (including Azure Trusted Signing) and macOS sign-and-notarize. It's mostly setting secrets in GitHub and a few lines of config, plus adding an x64/universal Mac build.
+- **EasySnec (Nuitka): doable, with more scripting.**
+  - Windows: sign the `.exe` after the build (Trusted Signing GitHub Action). Easy.
+  - macOS: use Nuitka's `.app` bundle mode (already in `build_nuitka.sh` via `APP_BUNDLE=1`), not the one-file binary, which unpacks code at run time and is awkward to notarize. Then `codesign` with the hardened runtime (Python may need an entitlement such as `allow-unsigned-executable-memory`), `notarytool submit`, `stapler staple`. Expect some trial and error.
+- **Does signing stop antivirus false positives?** It helps but doesn't guarantee it.
+  - Signing gives Windows SmartScreen and antivirus tools a known publisher, and reputation builds as more people download it.
+  - Nuitka's `--onefile` mode unpacks itself into a temp folder at launch. That behavior looks like malware to some antivirus heuristics, whether signed or not.
+  - Best practice for EasySnec: ship the `--standalone` folder inside the Inno Setup installer it already has, instead of `--onefile`. Sign both the installer and the `.exe`. If a scanner still flags it, submit the file to that vendor as a false positive (Microsoft has a portal for this).
+- **Intel Mac build for EasySnec: yes.** Add a second macOS job on an Intel GitHub runner (currently labelled `macos-15-intel`; check GitHub's current runner list), producing an x86_64 build next to the Apple Silicon one. First check that every dependency (Slint, `pyxdameraulevenshtein`, or its pure-Python replacement) publishes Intel-Mac wheels. A single "universal" Mac binary is harder with Nuitka; two downloads is simpler.
+- **A web app (either language): nothing to sign, no antivirus issues, no per-CPU builds.**
 
 **Likely link to NGZ's Mac problem.** The v0.1.1 notes say NGZ doesn't work on Macs. Unsigned, un-notarized apps downloaded on recent macOS are often reported as "damaged". The workaround is System Settings → Privacy & Security → **Open Anyway**; the old right-click → Open shortcut no longer works on macOS 15. Signing and notarizing should fix it. This is still unconfirmed until someone tests on a Mac.
 
@@ -619,3 +709,39 @@ EasyGecNG works today and has the most features, so keep it as a feature referen
 | **Damerau–Levenshtein distance** | Number of insertions, deletions, substitutions and adjacent swaps to turn one list into another; EasySnec uses it to guess the course. |
 | **Levenshtein alignment** | The edit-distance method EasyGec and NGZ use to line up punches with a course and mark each control found or missing. |
 | **OTG (On-The-Go)** | USB mode/adapter that lets a phone or tablet act as a USB host and power a device like the SI station. |
+
+---
+
+## 8. How we make changes (recommended process)
+
+A lightweight "GitHub flow", the same in every repo (NGZ, EasySnec, and whichever becomes the main product):
+
+1. **`main` is always releasable and protected.** Turn on branch protection (GitHub → Settings → Branches → add rule for `main`):
+   - require a pull request before merging
+   - require **1 approving review** (2 for grading rules or the SI protocol)
+   - require CI status checks to pass (tests, Ruff/pyright or ESLint/tsc)
+   - require branches to be up to date
+   - block force-pushes and deletion
+2. **Every change happens on a short-lived branch**, named for its purpose: `fix/double-punch-grading`, `feat/score-o-points`, `docs/overview`. Keep each branch to one topic, and aim to merge within days.
+3. **Open a pull request early**, as a draft if unfinished. Use a short PR template:
+   - what and why
+   - how it was tested (tests added; real hardware or mock)
+   - screenshots for UI changes
+   - linked issue
+4. **Designated reviewers.**
+   - A `CODEOWNERS` file names 2–3 maintainers as required reviewers. Grading and protocol code get a named owner who must approve changes there.
+   - The author never approves their own PR.
+   - Reviewers check: does it match the spec in §0, are there tests, is it readable?
+5. **Claude-written changes follow the same path.** Claude works on a branch and opens a PR; a human reviewer approves and merges. Label these PRs (e.g. `claude`) so reviewers know to read them closely.
+6. **Merging.** Squash-merge, so each PR becomes one clean commit on `main`, and delete the branch.
+7. **Releases** are tags on `main` (`v0.2.0`), built by CI. A short changelog entry goes in each PR or release.
+8. **Work is tracked in GitHub Issues**, with labels (`bug`, `grading`, `course-data`, `hardware`) and a small project board. EasySnec's `TODO.md` would move into issues.
+9. **Definition of done:**
+   - tests added or updated (shared grading test cases for any rule change)
+   - docs updated (this overview for decisions)
+   - CI green
+   - one approval
+   - tried on real hardware when it touches card reading
+
+For a small volunteer team, one required approval is enough for most changes. Keep the two-approval rule only for grading and protocol code, where a mistake shows up as a wrong face at an event. Consider moving NGZ from `bidwbb/ngz` into the `Navigation-Games` organization so the same team and rules cover every repo.
+
