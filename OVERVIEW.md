@@ -303,7 +303,7 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 | | EasySnec (Python + Slint, Nuitka) | NGZ today (Electron) | **Web app (TypeScript, built from NGZ's core)** | EasyGecNG (Java 8) |
 |---|---|---|---|---|
 | Windows | ✅ unsigned exe | ✅ unsigned installer/portable | ✅ Chrome/Edge | ✅ needs Java |
-| macOS | ✅ Apple Silicon only (no Intel build yet) | ✅ | ✅ Chrome/Edge | ✅ needs Java |
+| macOS | ✅ Apple Silicon only (no Intel build yet) | ⚠️ arm64 DMG only. **The v0.1.1 release notes say it does not work on Macs yet** | ✅ Chrome/Edge | ✅ needs Java |
 | Linux | ✅ | ✅ AppImage | ✅ Chrome/Chromium | ✅ |
 | **Chromebook** (common in schools) | ❌ | ❌ | **✅ Web Serial works on ChromeOS** | ❌ |
 | **Android** tablet/phone + USB-OTG | ❌ (Slint's Android support is for Rust/C++, not Python) | ❌ | ⚠️ Possible. Web Serial reached Chrome **beta** for Android in April 2026 (v148). The other route is WebUSB plus a JavaScript CP210x driver, which already exists in open-source projects. Needs testing on real devices | ❌ |
@@ -315,7 +315,7 @@ The USB driver situation is the same for every option. Windows needs the CP210x 
 ### 6.2 Sharing with clients (teachers, clubs)
 
 1. **Web app:** send a link. No install, no unsigned-binary warnings, and updates arrive automatically. As a PWA it can be "installed" to the dock or desktop and works offline after the first visit. It can be hosted free (GitHub Pages or the Navigation Games site).
-2. **NGZ/Electron:** one-click installers already exist. They're large (about 100 MB+) and unsigned, so Windows SmartScreen and macOS Gatekeeper show warnings.
+2. **NGZ/Electron:** one-click installers already exist. They're large: v0.1.1 is 82 MB (Windows exe), 99 MB (DMG) and 109 MB (AppImage), because each one bundles a whole copy of Chromium and Node. The NGZ *code* itself is only about 1,700 lines of TypeScript plus CSS. They're also unsigned, so Windows SmartScreen and macOS Gatekeeper show warnings.
 3. **EasySnec/Nuitka:** a single binary. It's smaller, but just as unsigned, and Nuitka one-file binaries are known to trigger antivirus false positives. No Intel Mac build yet.
 4. **EasyGecNG:** install Java 8, unzip, run a `.bat`. The worst of the four.
 
@@ -379,7 +379,19 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
   - Running Python in the browser (Pyodide). The serial library EasySnec uses can't work there, so it would mean rewriting the I/O layer anyway.
   - A Rust/Slint rewrite (Navigation-Games has a `sportident-rs` fork and a `navgames_prototype_rust` repo, which I haven't reviewed). That would reach Android natively, but it's the biggest effort for the fewest contributors.
 
-### 6.6 Sources
+### 6.6 Technology options, pros and cons
+
+| Option | Download size | Platforms | Pros | Cons |
+|---|---|---|---|---|
+| **Web app / PWA (TypeScript)** | ~1 MB, loaded from a URL | Win/Mac/Linux/ChromeOS in Chrome or Edge; Android possible | Share by link; no install, signing or updates to manage; reuses NGZ's core; huge pool of web developers; Claude is strong here | Chromium browsers only; one "pick the port" click per session; offline use needs a PWA; Android unproven |
+| **Electron (NGZ today)** | 80–110 MB | Win/Mac/Linux | Full Node access; same TypeScript and React as the web; mature tooling | Big downloads; unsigned builds trigger warnings; Mac build reported broken; no Chromebook/Android |
+| **Tauri (TypeScript UI + small Rust shell)** | ~5–15 MB (estimate) | Win/Mac/Linux; mobile support is newer | Small installers; can reuse the web UI unchanged | Serial I/O must be done in Rust (a plugin); macOS/Linux web views (WebKit) differ from Chrome; another toolchain to learn |
+| **Python + Slint (EasySnec)** | tens of MB (Nuitka one-file; not measured) | Win/Mac/Linux | Python is accessible to students; small codebase; native-feeling UI | Slint's Python bindings are beta; no browser/ChromeOS/Android; Nuitka binaries trip antivirus; UI-thread blocking needs care |
+| **Python + Qt (PySide6)** (EasySnec used this before moving to Slint) | ~100 MB+ | Win/Mac/Linux | Very mature, well documented | Heavy; the team already moved away from it; still no browser/Android |
+| **Java Swing (EasyGecNG)** | small, plus a Java install | Win/Mac/Linux | Works today; full feature set | Java 8 install; old UI toolkit; French-named, untested code |
+| **Rust + Slint** | ~10 MB | Win/Mac/Linux, Android natively | Fast, small, single binary; mobile possible | Steepest learning curve; fewest contributors; a total rewrite |
+
+### 6.7 Sources
 - [Chrome Web Serial docs](https://developer.chrome.com/docs/capabilities/serial)
 - [Intent to Ship: Web Serial on Android](https://groups.google.com/a/chromium.org/g/blink-dev/c/HBJ-uYFvkpM)
 - [Chrome 148 Beta for Android adds Web Serial](https://www.notebookcheck.net/Chrome-148-Beta-for-Android-adds-Web-Serial-SharedWorker-support.1269721.0.html)
