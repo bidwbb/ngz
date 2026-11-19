@@ -408,7 +408,7 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 ### 6.5 Recommendation
 - **The decision hinges on one question: do we need the app in a browser** (Chromebooks, share-by-link with no install or signing, maybe Android tablets)?
   - **If no** (event laptops are Windows/Mac, and installers plus signing are acceptable): **stay in Python with EasySnec.** Use pywebview for the UI, pyright strict plus Ruff, the reader-thread pattern, course data files, shared test cases, and signed Nuitka builds. That's a perfectly sound choice.
-  - **If yes:** the browser forces JavaScript/TypeScript, and then the option below is the way.
+  - **If yes:** the browser strongly favors JavaScript/TypeScript, and then the option below is the way. Python *can* run in a browser, but at a real cost (see "Python in the browser" below).
 - **If browser reach matters, the strongest path is one TypeScript codebase.**
   - A core package (protocol, grading, course data) that is browser-safe and tested against shared test cases.
   - A **web/PWA front end** as the main way to deliver it.
@@ -427,14 +427,27 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
   - (c) Keep both for a season, then decide.
   - I'd lean toward (a), and ask the team tonight how they feel about it.
 - **Not recommended:**
-  - Running Python in the browser (Pyodide). The serial library EasySnec uses can't work there, so it would mean rewriting the I/O layer anyway.
+  - Running Python in the browser as the main product (see below).
   - A Rust/Slint rewrite (Navigation-Games has a `sportident-rs` fork and a `navgames_prototype_rust` repo, which I haven't reviewed). That would reach Android natively, but it's the biggest effort for the fewest contributors.
+
+**Python in the browser: possible, with caveats** (corrected 2026-11-19; an earlier version of this doc said Python couldn't use serial ports in a browser, which was wrong).
+- **Pyodide** is the real Python interpreter compiled to WebAssembly; **PyScript** is a friendlier layer on top of it. Python code in the page can call browser features, including **Web Serial**, through Pyodide's JavaScript bridge. A library already does this: `serialx` has an async Pyodide/Web Serial backend.
+- **What carries over:** EasySnec's grading and course code is pure Python and would run as-is (except the `pyxdameraulevenshtein` C extension, which needs a pure-Python replacement).
+- **What doesn't:** `pyserial` and the `sportident` library use the operating system's serial API with blocking reads, so they don't work in a browser. The SI reading layer would have to be rewritten as async code on Web Serial: either port NGZ's protocol code to Python, or adapt `sportident`'s decoding parts.
+- **Costs:**
+  - a large first download for the Python runtime (several MB; the official baseline is about 6.4 MB plus a few seconds to start, and recent releases are larger)
+  - slower startup than plain JavaScript
+  - the UI is still HTML/CSS (plus some JavaScript, or Python manipulating the page through the bridge)
+  - two runtimes in one page, harder debugging, and a much smaller community than plain web apps
+- **The same browser limits apply:** Chrome/Edge only, no iOS, Android unproven.
+- **Verdict:** a legitimate option if the tech dev team strongly wants to stay in Python *and* browser reach is required. It costs more than TypeScript to build and debug, but it keeps the language. Worth a small prototype before committing. Sources: [serialx Pyodide backend](https://puddly.github.io/serialx/how-to/pyodide.html), [Pyodide deployment docs](https://pyodide.readthedocs.io/en/latest/usage/downloading-and-deploying.html), [Pyodide 314.0 release notes](https://blog.pyodide.org/posts/314-release/).
 
 ### 6.6 Technology options, pros and cons
 
 | Option | Download size | Platforms | Pros | Cons |
 |---|---|---|---|---|
 | **Web app / PWA (TypeScript)** | ~1 MB, loaded from a URL | Win/Mac/Linux/ChromeOS in Chrome or Edge; Android possible | Share by link; no install, signing or updates to manage; reuses NGZ's core; huge pool of web developers; Claude is strong here | Chromium browsers only; one "pick the port" click per session; offline use needs a PWA; Android unproven |
+| **Python in the browser (Pyodide/PyScript)** | several MB+ runtime, cached after first load | Same as the web app (Chrome/Edge) | Keeps Python for the logic; share by link; no installers | Serial layer must be rewritten as async Web Serial code; slower startup; harder debugging; smaller community; UI still HTML/CSS/JS |
 | **Electron (NGZ today)** | 80–110 MB | Win/Mac/Linux | Full Node access; same TypeScript and React as the web; mature tooling | Big downloads; unsigned builds trigger warnings; Mac build reported broken; no Chromebook/Android |
 | **Tauri (TypeScript UI + small Rust shell)** | ~5–15 MB (estimate) | Win/Mac/Linux; mobile support is newer | Small installers; can reuse the web UI unchanged | Serial I/O must be done in Rust (a plugin); macOS/Linux web views (WebKit) differ from Chrome; another toolchain to learn |
 | **Python + Slint (EasySnec)** | tens of MB (Nuitka one-file; not measured) | Win/Mac/Linux | Python is the tech dev team's language and widely known; small codebase; native-feeling UI | Slint's Python bindings are beta; no browser/ChromeOS/Android; Nuitka binaries trip antivirus; UI-thread blocking needs care |
@@ -510,7 +523,7 @@ The biggest caveat: **the easiest code to maintain is code the maintainers know.
 - For someone new reading the grading rules, Python is a little easier.
 - For keeping a growing app correct over years, TypeScript's enforced types give it the edge.
 - The gap between the languages is smaller than the gap between the delivery choices (web vs packaged desktop) in §6.1–6.2.
-- **So the language alone is not a compelling reason to leave Python.** With pyright strict, Ruff, tests and the reader-thread pattern, Python can be kept correct. The only compelling reason for TypeScript is **delivery**: a browser app (link sharing, no installers or signing, Chromebooks, maybe Android) must be JavaScript/TypeScript, because Python can't use serial ports in a browser. See §6.5.
+- **So the language alone is not a compelling reason to leave Python.** With pyright strict, Ruff, tests and the reader-thread pattern, Python can be kept correct. The only compelling reason for TypeScript is **delivery**: a browser app (link sharing, no installers or signing, Chromebooks, maybe Android) is far easier in JavaScript/TypeScript. Python can run in a browser via Pyodide, but the SI reading layer would need rewriting and the runtime adds size, startup time and debugging difficulty. See §6.5.
 
 ### 6.10 Porting or rewriting: how much code would actually move?
 
