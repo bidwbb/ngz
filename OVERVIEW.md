@@ -28,6 +28,10 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
 - **Organizer notes:** shown small on the result screen and in the log, not as part of the child's verdict.
   - **"Station clocks look out of sync — please synchronize the controls"** when the punches are in the right order by card order but their timestamps are out of order.
   - **"Please clear your card before your next run"** when the card holds punches from an earlier run.
+- **How an SI card stores a run** (background for the next point):
+  - **Punches** go into a list, in the order they were made. Each one records the control code and the time from *that control's* clock.
+  - **Start and finish** go into their own two slots, not into the list. Only the latest of each is kept: punching Start again overwrites the earlier start.
+  - **Clear and check** stations reset the card and record their own times. An uncleared card keeps its old punches, and new ones are added after them.
 - **Uncleared cards: how to drop old punches "by order".**
   - *The limitation:* an SI card stores the start and finish punches in their own slots, not in the punch list. It keeps only the latest start and the latest finish (punching Start again overwrites the old one). So the card itself doesn't record *where* in the punch sequence the start happened, or how many starts there were. Neither "more than one start or finish" nor a pure order-only window can be read off the card directly.
   - *Proposed method (order-based, with one time comparison):*
@@ -37,6 +41,8 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
     - Time is used only once, to find that boundary. Clock drift elsewhere can't drop a real punch.
   - *If there's no start punch:* use all punches and match against the **latest** occurrences of each code.
   - *The "clear your card" note* appears whenever punches were dropped as an earlier run. That is the practical equivalent of "more than one start": it's what an uncleared card looks like.
+  - **The child still gets a result** (decided 2026-11-19): grade our best guess of the run they just did (the punches after the boundary), and show the "please clear your card" note alongside it.
+  - **How this differs from NGZ today:** NGZ's `App.tsx` checks *each* punch's time against both the start and the finish time. A control whose clock is a little behind the start clock, or ahead of the finish clock, gets dropped as if it were old. The proposal uses time once, to find the boundary, keeps everything after it in card order, and never trims at the finish.
   - *Extra check:* if the remaining punches contain the same course twice, show the same note.
 - **No matching course:** when the best match is too weak, show a neutral "We couldn't tell which course you did" screen, list the punches, and let the organizer pick a course from a dropdown.
   - **Recommendation: require at least half the course found in order (3 of 5, 5 of 10), not 40%.** 40% of a 5-control course is 2 controls.
@@ -73,6 +79,7 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
 - **More course types will come.** Design for it:
   - each course has a `type` plus type-specific settings (point values, poison list, time limit, …)
   - grading goes through one grader per type, registered in a table, so adding a type doesn't touch the others
+  - **shared building blocks:** the types will share a lot of checking logic (cleaning old punches, matching punches to controls in order or as a set, mistake labels like missing/extra/shuffle, time calculations). Factor these into common helpers that each type's grader combines, rather than one big grader with a switch. Exactly where to draw the lines can be decided when the second and third types are built.
   - each type gets its own shared test cases
 - **Poison-O**, as defined in the curriculum: safe controls are those on the runner's map; any other control in the event is poison.
   - Proposed scoring: safe controls found − poison controls punched.
@@ -346,7 +353,7 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 | iPad / iPhone | ❌ | ❌ | ❌ (Safari has neither Web Serial nor WebUSB) | ❌ | ❌ |
 | Firefox / Safari on desktop | n/a | n/a | ❌ (Chromium-based browsers only) | ❌ | n/a |
 
-Python-in-the-browser notes: the first download is several MB for the Python runtime (cached afterwards), startup takes a few seconds, and the SI reading layer must be rewritten as async Web Serial code (see §6.5). The USB driver situation is the same for every option. Windows needs the CP210x driver; macOS, Linux and ChromeOS generally have it built in.
+Python-in-the-browser notes: the first download is several MB for the Python runtime (cached afterwards), startup takes a few seconds, and the SI reading layer must be rewritten as async Web Serial code (see §6.5). The USB driver situation is the same for every option. Windows needs the Silicon Labs CP210x driver (Windows Update often installs it). Linux and ChromeOS include it. **macOS: NGZ's README tells users to install the Silicon Labs driver; whether current macOS works without it is unverified.** Test this, because on a school-managed Mac a driver install needs IT, whatever app we choose.
 
 **Why not Firefox or Safari?** Web Serial and WebUSB were designed by Google and so far ship only in Chromium-based browsers (Chrome, Edge, Opera, Brave, ChromeOS). Mozilla and Apple have declined to ship them, mainly over security and privacy concerns (websites talking to hardware, fingerprinting). It's a policy choice, not a technical limit. On iPhone and iPad, Apple requires every browser to use Safari's engine, so Chrome there can't do it either.
 
@@ -488,6 +495,31 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
   - Both share the Python core and the same HTML UI.
 - **What the desktop shell brings back:** installers, signing and per-OS builds, but only for that version, and only if real users need it.
 - **Suggested approach:** launch web-first, keep the serial layer behind a small adapter interface from day one, and add the desktop shell only if real users can't use Chrome or Edge.
+
+**Warnings and approvals on school devices**
+- **A web app gets no Gatekeeper, SmartScreen or antivirus install warnings, in TypeScript or Python.** Those checks apply to downloaded programs, and a web app isn't one. Pyodide is WebAssembly running inside the browser's sandbox, so it's treated like any other web page.
+- **The web equivalents of those hurdles:**
+  - *School web filters* (e.g. GoGuardian, Securly, Lightspeed) can block unfamiliar sites. Host on a reputable domain (the Navigation Games site), serve everything, including Pyodide's files, from that same domain rather than a third-party CDN, and give IT the domain to allowlist.
+  - *Browser policies:* IT can turn off Web Serial or app installs. Chrome and Edge have admin policies to allow Web Serial for one named site.
+  - *The USB driver* (Windows, possibly Mac) may need admin rights: the same for every option.
+
+**Locked-down school Macs with only Safari.** Safari can't do it, so the choice is how to get a Chromium browser or another device:
+1. **Best: ask IT to install Chrome or Edge, then use the web app.** Many school Macs already have Chrome for Google Workspace. Installing a well-known browser is an easy, routine IT request.
+2. **A desktop app (Electron/pywebview) doesn't avoid IT.** Managed Macs usually block installing apps, and unsigned ones entirely. A signed app still needs IT to deploy it. It's the same request as installing Chrome, but for an unfamiliar app, so a harder sell.
+3. **Use a different device for the readout:** a school Chromebook or Windows laptop (Edge built in), or a Navigation Games loaner.
+4. **Prepare an "IT one-pager" for schools:**
+   - which domain to allowlist
+   - allow Web Serial for that site
+   - install the CP210x driver if needed
+   - on Macs, install Chrome or Edge
+
+**When would the desktop shell actually be needed?** Since teachers use school devices, rarely:
+- the device has no Chrome/Edge, and IT will install our app but not a browser (unusual)
+- IT blocks Web Serial in the browser but permits a desktop app
+- a Linux machine with only Firefox
+- a site where the device can never get online, not even once to install the web app
+
+In most cases, getting a desktop app approved takes the same IT effort as getting Chrome installed. So **start web-only**, keep the serial adapter separate so a desktop shell stays cheap to add, and build it only if these cases show up in practice.
 
 ### 6.6 Technology options, pros and cons
 
