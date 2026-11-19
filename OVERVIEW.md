@@ -13,6 +13,50 @@ All three serve the same purpose. A child finishes an orienteering course (usual
 
 > **Assumption to check:** I took "the three programs" to mean EasyGecNG, EasySnec and NGZ. I treated GecoSI as their shared foundation, not as one of the three.
 
+A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.md`](docs/EASYSNEC_REVIEW.md).
+
+## 0. Decisions & desired behavior (from Barb, 2026-11-19)
+
+### Grading
+- **Extra and repeated punches are fine.** They never make a run fail. They may be shown as information.
+- **Card punch order beats station timestamps.** Correctness comes from the order punches are stored on the card. Timestamps are only for showing times and for spotting old punches on uncleared cards, with a tolerance. Station clocks are often out of sync.
+- **Missing start or finish:** if the controls are right, the child still gets the **happy face**. The screen also says we can't give a time: _"We can't give you a time because you didn't punch Start"_ (or Finish, or both). This is a "no time" flag, not a failure state.
+- **Backwards:** if the run doesn't match any course forwards but is a perfect match for a course in reverse, the screen says so (_"You did Lion backwards!"_), but it is still a **sad face**. Other wrong-order runs get "right animals, wrong order" when nothing is missing.
+- **No matching course:** when the best match is too weak, show a neutral "We couldn't tell which course you did" screen, list the punches, and let the organizer pick a course from a dropdown.
+  - **Recommendation: require at least half the course found in order (3 of 5, 5 of 10), not 40%.** 40% of a 5-control course is 2 controls.
+  - A quick simulation: 5 random punches from 31–40, scored against the six 5-control Animal-O courses, *always* match at least 2 of 5 in order on some course, and 54% of the time match 3 of 5.
+  - So no threshold can tell "tried Lion and struggled" apart from random punching when the courses share 10 codes. The threshold mainly catches the wrong set of controls, an almost-empty card, or the wrong course set.
+  - Make the threshold a setting. Also flag **ties** ("Lion or Dog?"), and rely on the regrade dropdown for the rest.
+
+### Courses
+- **Built-in default course sets** that can be switched on and off (an EasySnec-style toggle):
+  1. **New Animal-O, 31–40**
+  2. **New Animal-O, 41–50**
+  3. **Old Animal-O**
+  4. **Basketball-O** (probably the same in new and old)
+- **Data needed from Barb.** I found two different Animal-O sets and no Basketball-O codes anywhere (`curriculum` and `website` repos included):
+  - **Set A** (NGZ and EasySnec, "Cambridge Plays", 31–40 only, matching the teaching kit's "six 5-animal + 10-animal" clue sheets):
+    - fives: Lion 31 33 36 38 39 · Dog 33 32 40 38 34 · Bee 35 37 38 40 33 · Bird/Blue Jay 36 34 31 38 37 · Elephant 37 34 31 40 39 · Crab 39 31 32 35 37
+    - tens: Frog · Octopus · Penguin · Sheep
+  - **Set B** (EasyGecNG `data/Animal-O_31-40 & 41-50.egc`, mirrored on 41–50):
+    - fives: Lion, Frog, Turtle, Sheep, Tiger, Fish
+    - tens: Lion (31–40 in order), Dog, Pig, Elephant, Frog, Sheep, Tiger
+    - two score courses that include one stray code from the other block (score 31–40 contains 42; score 41–50 contains 32). Probably a data-entry slip.
+  - Which is "new" and which is "old"? Is new Animal-O on 41–50 the same courses shifted by 10?
+  - Course data should live in **one JSON (or IOF XML) file per course set**, shared by whichever app we keep.
+
+### Course types in the UI
+- **Inline** (default), **Score-O** and **Poison-O** should all be selectable.
+- **Poison-O**, as defined in the curriculum: safe controls are those on the runner's map; any other control in the event is poison.
+  - Proposed scoring: safe controls found − poison controls punched.
+  - The face is happy if the run is all safe and every safe control was found. Otherwise "you found N, punched M poison".
+  - This is the one course type where an extra punch *does* count against you.
+  - Poison-O needs an event-wide list of all controls, so it knows which extra codes are poison and which are just stray.
+
+### Other
+- **Saving:** events and course sets, plus a log of every read (CSV export).
+- **Tests for everything:** shared grading test cases (JSON) plus unit tests in each codebase.
+
 ---
 
 ## 1. How each program works
@@ -199,7 +243,7 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 ## 4. Proposed plan
 
 ### Phase 0 — Decide (no code)
-1. **Choose the long-term home.** The deciding factor is who will maintain it.
+1. **Choose the long-term home.** See §6 for the technical assessment. The deciding factor is who will maintain it.
    - If the student team is the long-term maintainer, **EasySnec is the main product**. NGZ then becomes the reference and testing ground, and its features get ported over: the punch window, IOF XML import, protocol robustness, installers.
    - If Barb plus Claude-assisted development is the main engine, **NGZ is the main product**. EasySnec's UX ideas get pulled in: swap detection, the incomplete state, course-set switches, regrading, mock station, animated faces.
    - Running two apps for the same job long-term doubles the work, so pick one by a set date.
@@ -241,9 +285,105 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 ---
 
 ## 5. Open questions for Barb
-1. Which app should be the main product, and who maintains it in 2027?
-2. Should extra or doubled punches ever make a child's result sad?
-3. Is Navigation Games' Animal-O the NGZ/EasySnec 31–40 set, or the EasyGecNG 31–40 & 41–50 set?
+1. Which app should be the main product, and who maintains it in 2027? (See §6.)
+2. ~~Should extra or doubled punches ever make a child's result sad?~~ **Decided: no** (except Poison-O).
+3. Which Animal-O set is "new" and which is "old" (§0)? Can you send the Basketball-O codes?
 4. Which EasyGecNG features are truly needed: runner names, rankings, exports, ABC, UNSS, other languages?
 5. Is Electron's size acceptable on the laptops used at events?
 6. Should course sets come from the website, and in what format? IOF XML is the obvious choice.
+7. What threshold feels right for "couldn't tell which course"? I recommend at least half, configurable.
+8. Is the Poison-O scoring in §0 right? Does a Poison-O event have one list of all controls?
+
+---
+
+## 6. Which codebase to take forward? (assessment, 2026-11-19)
+
+### 6.1 Platform reach
+
+| | EasySnec (Python + Slint, Nuitka) | NGZ today (Electron) | **Web app (TypeScript, built from NGZ's core)** | EasyGecNG (Java 8) |
+|---|---|---|---|---|
+| Windows | ✅ unsigned exe | ✅ unsigned installer/portable | ✅ Chrome/Edge | ✅ needs Java |
+| macOS | ✅ Apple Silicon only (no Intel build yet) | ✅ | ✅ Chrome/Edge | ✅ needs Java |
+| Linux | ✅ | ✅ AppImage | ✅ Chrome/Chromium | ✅ |
+| **Chromebook** (common in schools) | ❌ | ❌ | **✅ Web Serial works on ChromeOS** | ❌ |
+| **Android** tablet/phone + USB-OTG | ❌ (Slint's Android support is for Rust/C++, not Python) | ❌ | ⚠️ Possible. Web Serial reached Chrome **beta** for Android in April 2026 (v148). The other route is WebUSB plus a JavaScript CP210x driver, which already exists in open-source projects. Needs testing on real devices | ❌ |
+| iPad / iPhone | ❌ | ❌ | ❌ (Safari has neither Web Serial nor WebUSB) | ❌ |
+| Firefox / Safari on desktop | n/a | n/a | ❌ (Chromium-based browsers only) | n/a |
+
+The USB driver situation is the same for every option. Windows needs the CP210x driver; macOS, Linux and ChromeOS generally have it built in.
+
+### 6.2 Sharing with clients (teachers, clubs)
+
+1. **Web app:** send a link. No install, no unsigned-binary warnings, and updates arrive automatically. As a PWA it can be "installed" to the dock or desktop and works offline after the first visit. It can be hosted free (GitHub Pages or the Navigation Games site).
+2. **NGZ/Electron:** one-click installers already exist. They're large (about 100 MB+) and unsigned, so Windows SmartScreen and macOS Gatekeeper show warnings.
+3. **EasySnec/Nuitka:** a single binary. It's smaller, but just as unsigned, and Nuitka one-file binaries are known to trigger antivirus false positives. No Intel Mac build yet.
+4. **EasyGecNG:** install Java 8, unzip, run a `.bat`. The worst of the four.
+
+### 6.3 Is a browser version insane? No.
+- **Web Serial** has been stable in Chrome, Edge and Opera on desktop since 2021 (Chrome 89). It reads and writes a serial port exactly as our desktop code does.
+- **Others already do this.** There are open-source SPORTident readers that run in the browser (the `sportident` / `sportident-webusb` npm packages).
+- **NGZ's core is mostly ready.**
+  - `SiDriver` already talks to the port through a small `SiPortAdapter` interface (write / setBaudRate / close).
+  - The course checker is already browser-safe.
+  - The renderer is already browser code.
+  - The work: replace about 25 uses of Node's `Buffer` with `Uint8Array`, write a Web Serial adapter, and move the per-card logic (punch filtering, choosing the course) out of `App.tsx` into the core.
+- **Kiosk features are all available in the browser:** full screen, Web Audio sounds, wake lock (stops the screen sleeping), storage in IndexedDB, and file export by download.
+- **Limitations:**
+  - Chromium browsers only.
+  - The user must click "Connect" and pick the port once per session (a browser security rule). Chrome can remember the permission.
+  - Android needs testing.
+
+### 6.4 Code quality, judged against the features we want
+The features we want are:
+- grading rules set by a spec
+- course sets loaded from data files
+- inline, Score-O and Poison-O courses
+- saving
+- tests for everything
+- several platforms
+
+That points to one shape: a **pure core library** (protocol, grading, course data, all tested against shared test cases) with a **thin UI** on top.
+
+- **NGZ** is closest to that shape. Protocol, course checking and UI are separate layers, the core has no UI dependencies, and 49 protocol tests use real card data. Weak spots:
+  - `App.tsx` is dense and holds logic that belongs in the core.
+  - No saving.
+  - The course checker has no tests.
+- **EasySnec** is very readable Python with a nice UI and a good mock. Its problems:
+  - Grading would need rewriting (see the review).
+  - Serial I/O blocks the UI thread.
+  - State lives at class level.
+  - The Slint Python bindings are still beta and force workarounds.
+  - It depends on a third-party SI library we don't control. The library is fine, but its behavior is set by someone else.
+  - Above all, **it can never run in a browser, on a Chromebook or on Android.**
+- **EasyGecNG** is the reference for features, not a base for new work.
+
+### 6.5 Recommendation
+- **Technically, the strongest path is one TypeScript codebase.**
+  - A core package (protocol, grading, course data) that is browser-safe and tested against shared test cases.
+  - A **web/PWA front end** as the main way to deliver it.
+  - The same UI optionally wrapped in Electron for offline/kiosk laptops or non-Chromium users.
+  - NGZ's `src/` becomes that core. Its renderer becomes the web app.
+- **EasySnec's best ideas should come across:**
+  - regrade dropdown
+  - course-set toggles
+  - swap detection
+  - the incomplete state
+  - the mock station
+  - animated faces and its sound sets
+- **The real question is people, not technology.** EasySnec has a team that has been active for a year. Options:
+  - (a) Invite them onto the TypeScript/web codebase. React and TypeScript are widely known, and the grading spec and test cases they write carry over directly.
+  - (b) Keep EasySnec as the desktop app and accept that it can't serve Chromebooks or Android, with both apps held to the same shared test cases.
+  - (c) Keep both for a season, then decide.
+  - I'd lean toward (a), and ask the team tonight how they feel about it.
+- **Not recommended:**
+  - Running Python in the browser (Pyodide). The serial library EasySnec uses can't work there, so it would mean rewriting the I/O layer anyway.
+  - A Rust/Slint rewrite (Navigation-Games has a `sportident-rs` fork and a `navgames_prototype_rust` repo, which I haven't reviewed). That would reach Android natively, but it's the biggest effort for the fewest contributors.
+
+### 6.6 Sources
+- [Chrome Web Serial docs](https://developer.chrome.com/docs/capabilities/serial)
+- [Intent to Ship: Web Serial on Android](https://groups.google.com/a/chromium.org/g/blink-dev/c/HBJ-uYFvkpM)
+- [Chrome 148 Beta for Android adds Web Serial](https://www.notebookcheck.net/Chrome-148-Beta-for-Android-adds-Web-Serial-SharedWorker-support.1269721.0.html)
+- [sportident-webusb (npm)](https://www.npmjs.com/package/sportident-webusb)
+- [WebUSB-CP2102 driver](https://gh.r-mj.com/calcite/WebUSB-CP2102)
+- [Slint language integrations (Python = beta)](https://docs.slint.dev/latest/docs/slint/language-integrations/)
+
