@@ -112,14 +112,21 @@ These are the places where the three programs disagree or where a choice was mad
 | Question | EasyGecNG | EasySnec | NGZ |
 |---|---|---|---|
 | Do extra punches (controls not on the course) make the run fail? | No | **Yes** (exact list match) | No |
-| Do repeated punches make the run fail? | No | **Yes** | No |
+| Do repeated punches make the run fail? | No | **Yes** for inline courses (score-O ignores repeats) | No |
 | Out of order on an inline course? | Fails (PM) | Fails, labeled "shuffle" when nothing is missing | Fails (PM) |
 | Missing start or finish punch? | Separate "late" face and caption | `INCOMPLETE` status with its own face | **Ignored.** A run can show a happy face with no finish punch |
 | Old punches on an uncleared card? | Not handled as far as I can tell | Not handled. With exact matching, old punches cause a failure | Removed using the start–finish window |
 | Score-O | Supported | Supported in code, unreachable in the UI | Supported in the validator, unreachable in the UI (every course is created inline) |
 
-**Decide:**
-- (a) Should extra or doubled punches count against a child? (For beginners the usual answer is "no, but mention them.")
+**Decided (2026-11-19):** extra and repeated punches are fine. They never make a run fail, though they may be shown. EasySnec needs to change to match: today `Grade.status` compares the whole punch list for exact equality (set equality for score-O), so any extra punch gives `MISSES`. Its own unfinished `xfail` test cases already expect extras to be ignored for score-O.
+
+**Proposed: card memory order is what counts for correctness, not station timestamps.** Station clocks can drift apart, but the card stores punches in the order they were made.
+- NGZ's parser and validator already use memory order. Punches are never sorted by time.
+- The **only** place time decides correctness is the start–finish window filter in `App.tsx`, which removes old punches from uncleared cards. If a control's clock is ahead of the finish clock or behind the start clock, a real punch gets dropped and shows as missed.
+- Fix: keep the filter only for its real job (old punches from an earlier run). Give it a tolerance of several minutes, don't trim against the finish time at all, and use times only for showing race time and splits.
+- The trade-off: on an uncleared card with badly drifted clocks, an old run's punches could slip through. Matching against the *latest* occurrences of each code reduces that risk. Clearing cards removes it.
+
+**Still to decide:**
 - (b) Is a missing start or finish a third result state? EasyGec and EasySnec say yes, NGZ says no. NGZ should probably add it.
 - (c) Should "right controls, wrong order" get a gentler message than "missed controls"? EasySnec's swap detection is a nice idea.
 
