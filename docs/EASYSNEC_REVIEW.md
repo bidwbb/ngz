@@ -79,17 +79,27 @@ mistakes (to_slint):
   shuffle     if not SUCCESS, nothing missed, and start+finish present
 ```
 
+**Two different steps, often confused:**
+1. **Choosing the course** uses the Damerau–Levenshtein *edit distance*: how many insertions, deletions, substitutions and adjacent swaps turn the punch list into each course. The closest course wins.
+2. **Pass or fail** is then plain **exact equality** between the punch list and that course.
+
+The edit-distance algorithm only *guesses which course*. Grading is exact, which is why one extra or repeated punch fails the run (§4.1).
+
 ---
 
 ## 3. Strengths
 
-- **Clear structure for its size.** Data is in frozen dataclasses, with `cached_property` for things that are derived from them.
+- **Clear structure for its size.** Data is in **frozen dataclasses**, with **`cached_property`** for things that are derived from them.
+  - A *dataclass* is a class that just holds data; Python writes the constructor, printing and comparison for it.
+  - *`frozen=True`* makes instances read-only, so a card read or grade can't be changed by accident later. It's also safe to share between threads, and easy to compare in tests.
+  - *`cached_property`* computes a value on first access and remembers it (e.g. `Grade.status`). With frozen data the cache can never go stale.
+  - Caveat: freezing is shallow. `Course.stations` is a `list`, whose contents can still change; a `tuple` closes that gap (see §4.11).
 - **The UI is declarative and kept apart from the logic.** Python only sets properties and handles callbacks.
 - **`SerialInterface` as a `Protocol`** with a real implementation and a mock one is the right way to make it testable. The **mock station window** is a great development tool.
 - **The regrade dropdown** handles a wrong course guess well. NGZ doesn't have this.
 - **Course sets you can switch on and off** cut down wrong guesses when courses overlap.
 - **Swap ("Out of Order") detection** and the incomplete state (missing start or finish) are good UX ideas.
-- **Engineering habits:** Ruff and pytest run on every PR. typeguard in tests. Pinned action SHAs. Builds for 3 operating systems on tag. A Nix flake. MIT license.
+- **Engineering habits:** Ruff and pytest run on every PR. typeguard in tests. Pinned action SHAs. Builds for 3 operating systems on tag. A Nix flake. MIT license. (These terms are explained in the glossary, [`OVERVIEW.md` §7](../OVERVIEW.md).)
 - The Nuitka build script is well commented. It explains *why* each `--include-*` flag is there.
 
 ---
@@ -173,6 +183,8 @@ These workarounds come from using the **Python bindings for Slint, which are sti
 - `from_serial_interface()` calls `default()` and then repeats its setup. `default()` builds a `ConcreteSerialInterface` that is thrown away right after.
 - `score` for inline courses is `1 / seconds` and divides by zero for a 0-second run. `.seconds` ignores days. Not used in the UI yet.
 - `missed_checkpoints` returns raw codes and `extra_checkpoints` returns emoji. These are inconsistent, and `scoring_output` / `OutputData` are leftovers nothing uses.
+- **Shallow freeze:** `Course.stations` and `InputData.punches` are lists inside frozen dataclasses. Make them `tuple`s so the data is truly read-only (and hashable).
+- **Slint license:** Slint's free (royalty-free) license requires visible attribution, e.g. an "About Slint" mention. Check this is done, or that the GPL option is what's intended.
 - **Dependencies:**
   - `sireader` *and* `sportident` are both listed, but only `sportident` is used (it's the newer name for the same library).
   - `pydantic` is listed but not used.
@@ -182,9 +194,10 @@ These workarounds come from using the **Python bindings for Slint, which are sti
 - **Tests:**
   - Only grading is tested. The two `xfail` tests are TODO tables, not assertions, and they're a good starting point for the shared test cases.
   - Nothing tests course detection on realistic Animal-O data, `CourseManager`, or `to_slint`.
+  - There's no *static* type checker. typeguard only checks types while the tests run; adding **pyright** (or mypy) to CI would catch type mistakes everywhere without running anything.
 - **Build/distribution:**
   - The macOS build runs on `macos-latest` (Apple Silicon), so there's **no Intel Mac binary**.
-  - Nothing is signed. Unsigned Nuitka `--onefile` binaries are known to trip antivirus false positives on Windows, and Gatekeeper on macOS.
+  - Nothing is signed. Unsigned Nuitka `--onefile` binaries are known to trip antivirus false positives on Windows, and Gatekeeper on macOS. Signing steps: [`OVERVIEW.md` §6.7](../OVERVIEW.md).
   - The `run_easysnec.bat` / `.ps1` scripts depend on `uv` being installed.
 
 ---
@@ -258,7 +271,40 @@ EasySnec moved from Qt (PySide6 + QML) to Slint in mid-2026. The history suggest
 
 **Recommendation if staying in Python: pywebview.** Python keeps the SI reader and grading; the UI becomes plain HTML/CSS/JS, the easiest kind for anyone to work on. It's also a bridge to a pure web app later. Kivy is the only Python option that reaches Android, at a real cost in effort and polish.
 
+**Why the team probably moved from Qt to Slint.** The evidence points to the work, not the download size, though Qt's 100 MB+ probably didn't help: packaging pain, the Python↔QML glue, and sync bugs (see above). The Slint rewrite was done in a hurry before a demo (one commit message reads "night before oh god"). Worth asking the team directly.
+
+**How pywebview would work in EasySnec**
+- **Same separation as today.** Python owns the SI reader, grading and course data. The UI is declarative HTML/CSS. JavaScript calls the Python methods we choose to expose (pywebview's `js_api`). Python pushes results to the page (e.g. `window.evaluate_js` or a small event function).
+- **Keep it small:**
+  - plain HTML/CSS plus, if needed, a tiny no-build library (Alpine.js or Preact) loaded from a local file
+  - no npm build pipeline
+  - HTML `<audio>` replaces the `playsound3` dependency
+- **Fast UI work:** open the same HTML in a normal browser with a fake `js_api` object and iterate without hardware or a rebuild.
+
+**Gains over Slint**
+- mature, stable tools instead of beta bindings
+- none of the §4.9 workarounds
+- HTML/CSS skills are common
+- animation, images and sound are built in
+- BSD license with no attribution clause
+- the UI can be reused if we later move to a pure web app
+
+**Costs**
+- rewriting about 740 lines of `.slint`
+- small differences between each OS's browser view: Edge WebView2 on Windows, Safari's WebKit on macOS, GTK WebKit on Linux (which needs those system packages)
+- Nuitka packaging and signing are still needed
+- two languages (Python + JavaScript) with a bridge between them
+
+**Platforms**
+- Windows, macOS and Linux: yes.
+- Android: pywebview has experimental support, but `pyserial` doesn't work on Android, so reading the station there would need new Android-specific USB code.
+- iOS: no.
+
 ### 8.2 Recommended threading pattern
+
+**Today:** there is no second thread. A Slint timer fires every 100 ms *on the UI thread* and calls `poll_sicard()` and then `read_sicard()`, which waits for the station. While it waits, the window can't redraw or respond: up to 5 s if a card is pulled early or the station is unplugged.
+
+**Recommended:** move the waiting to a reader thread. The UI timer stays, but it only collects finished results, which is instant.
 
 Rule: **only the UI thread touches UI objects; blocking serial I/O never runs on the UI thread.**
 
@@ -299,5 +345,6 @@ def request_check_si(self):
 - Start the thread on Start or Connect and stop it with the `Event` on disconnect. Mark it `daemon=True` so quitting the app never hangs.
 - The other option is an asyncio task on `slint.run_event_loop()` that runs the blocking calls through `await asyncio.to_thread(reader.read_sicard)`. It's equally valid if the team prefers async, but the queue version is easier to reason about and test.
 - Grading is fast pure Python. It stays on the UI thread.
+- For comparison: a web app needs no threads at all, because Web Serial is asynchronous (`await reader.read()`). NGZ/Electron already does the right thing: serial runs on events in the main process and results go to the window by message.
 
 Signing for Nuitka builds is covered in [`OVERVIEW.md` §6.7](../OVERVIEW.md).

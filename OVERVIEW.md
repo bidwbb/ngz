@@ -29,6 +29,10 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
   - Make the threshold a setting. Also flag **ties** ("Lion or Dog?"), and rely on the regrade dropdown for the rest.
 
 ### Courses
+- **Several course sets can be active at once** (EasySnec already does this). Caveats to design for:
+  - Sets on the *same* controls (e.g. old and new Animal-O, both on 31–40) compete for the course guess.
+  - Course names can collide across sets ("Lion" in both), so show the set name on the result and in the regrade dropdown.
+  - Sets on different controls (31–40 vs 41–50) don't interfere.
 - **Built-in default course sets** that can be switched on and off (an EasySnec-style toggle):
   1. **New Animal-O, 31–40**
   2. **New Animal-O, 41–50**
@@ -47,6 +51,7 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
 
 ### Course types in the UI
 - **Inline** (default), **Score-O** and **Poison-O** should all be selectable.
+- **Score-O with different point values per control.** The NGZ v0.1.1 release notes list this as a requirement to confirm. None of the three apps supports it today. Is it still wanted?
 - **Poison-O**, as defined in the curriculum: safe controls are those on the runner's map; any other control in the event is poison.
   - Proposed scoring: safe controls found − poison controls punched.
   - The face is happy if the run is all safe and every safe control was found. Otherwise "you found N, punched M poison".
@@ -249,6 +254,11 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
    - Running two apps for the same job long-term doubles the work, so pick one by a set date.
 2. **Settle the grading rules in §2.1** and write them down as a short spec.
 3. **Settle the canonical Animal-O data (§2.3)** and the scope list (§2.6).
+4. **A 1–2 day Web Serial prototype** to prove a browser can talk to the station before committing:
+   - Add a Web Serial adapter to NGZ's protocol code, and a bare page that connects and shows a card's punches.
+   - Read real SI5, SI8/9/10 and SIAC cards with a real station.
+   - Test on a Windows laptop, a Mac, a Chromebook (ideally a school-managed one), and an Android tablet with a USB-C OTG adapter.
+   - Hardware testing needs a person; Claude can build the prototype.
 
 ### Phase 1 — Shared spec and test vectors (helps whichever app wins)
 - `courses/animal-o.json`: the canonical course data, including emoji or animal per code.
@@ -312,6 +322,16 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 
 The USB driver situation is the same for every option. Windows needs the CP210x driver; macOS, Linux and ChromeOS generally have it built in.
 
+**Why not Firefox or Safari?** Web Serial and WebUSB were designed by Google and so far ship only in Chromium-based browsers (Chrome, Edge, Opera, Brave, ChromeOS). Mozilla and Apple have declined to ship them, mainly over security and privacy concerns (websites talking to hardware, fingerprinting). It's a policy choice, not a technical limit. On iPhone and iPad, Apple requires every browser to use Safari's engine, so Chrome there can't do it either.
+
+**Phones and tablets**
+- **Android:** the station connects by cable. Use a USB-C OTG adapter or cable; the phone or tablet acts as the USB host and powers the station.
+  - Native Android apps already read SI cards this way, so the hardware path works. Our *browser* route is what's unproven (§4, Phase 0 prototype).
+  - A tablet makes a better kiosk than a phone, because the face is bigger.
+- **Wireless:** SPORTident has offered Bluetooth-capable stations and a radio (SRR) system with a USB dongle. Chrome can open some Bluetooth serial devices, but browsers can't use classic Bluetooth serial in general. Only worth exploring if Navigation Games already owns such hardware.
+- **iPhone/iPad: not possible with any option.** iOS doesn't allow apps or websites to use a USB serial device like the SI station; only Apple-certified accessories are allowed. Workaround that works with any choice: a **relay**. Plug the station into a cheap laptop or Raspberry Pi that reads cards and serves a results page over local Wi-Fi, and use iPads or phones as displays. So iOS shouldn't drive the technology decision.
+- **Desktop options can't reach phones either.** Electron, Nuitka and Java apps are desktop-only. A web app is the option that reaches the most platforms, not the fewest.
+
 ### 6.2 Sharing with clients (teachers, clubs)
 
 1. **Web app:** send a link. No install, no unsigned-binary warnings, and updates arrive automatically. As a PWA it can be "installed" to the dock or desktop and works offline after the first visit. It can be hosted free (GitHub Pages or the Navigation Games site).
@@ -331,8 +351,31 @@ The USB driver situation is the same for every option. Windows needs the CP210x 
   - *Saving its own data* (events, course sets, read log) goes into private browser storage. No prompt, but it lives inside the browser.
   - *Opening a file* (e.g. an IOF XML course file) needs the user to pick it in a file dialog or drag it onto the page.
   - *Saving or exporting* is either an ordinary download (CSV) or, in Chrome/Edge, a "Save as" dialog. After that, the app can keep writing to that same file (e.g. an auto-saving read log) once the user grants permission. Chrome can remember the permission for installed apps.
-- **Offline:** as an installed PWA, the app is cached on the device after one online visit and then runs with no internet. Data stays in local storage, with CSV export as a backup.
+- **Offline (installed PWA)**
+  - *How it works:* on the first visit while online, a small *service worker* script stores the whole app (about 1 MB: code, faces, sounds) on the device. The user clicks "Install app" to get a normal icon and window. From then on, it starts and runs with no internet. The station connection is local USB anyway. Updates download quietly the next time the device is online.
+  - **Install before the event.** A device that has never opened the app can't get it in a field with no signal, so the teacher setup steps should say "open the link and click Install while on Wi-Fi". Show a "Ready for offline use ✓" indicator in the app.
+  - **Protect data:** ask the browser for *persistent storage* (installed apps usually get it), so it won't evict data when the disk is full. Add a prominent **Export / backup** button, and optionally auto-save the read log to a real file the teacher picks.
+  - Ship the **built-in course sets inside the app**, so they work offline from the first launch.
+  - Show the **version number**, since a laptop kept offline for months keeps an old version.
+  - The app must be served over HTTPS. Opening a saved HTML file from disk isn't a reliable offline substitute.
+  - For a site that never has internet, even for setup, the same code can ship as an Electron or Tauri installer.
+- **Talking to the station in the browser**
+  - The station's USB chip (Silicon Labs CP210x) appears as a serial port (38400 baud, 4800 fallback); Web Serial reads and writes it like NGZ's desktop code does.
+  - The first time, the user picks the port in Chrome's list; Chrome can remember it and reconnect later.
+  - Web Serial can't change baud rate on an open port, so NGZ's "try 38400, fall back to 4800" becomes close-and-reopen.
+  - Web Serial reports unplugging, so the app can show "station disconnected" and offer to reconnect.
+  - No threads needed: reads are asynchronous, so the page never freezes.
+  - **School-managed Chromebooks** may have admin policies blocking USB devices or app installs. Test with a real school device.
 - **Kiosk features are all available in the browser:** full screen, Web Audio sounds, wake lock (stops the screen sleeping), storage in IndexedDB, and file export by download.
+- **Advantages of a web app, in summary:**
+  1. Share by link: no installer, no Java, no unsigned-app warnings, no signing costs.
+  2. Updates reach everyone automatically.
+  3. Runs on Chromebooks, and probably Android tablets.
+  4. One codebase and one build for every OS, so no per-OS packaging bugs like NGZ's Mac issue.
+  5. Works offline once installed.
+  6. About 1 MB versus 80–110 MB for Electron.
+  7. HTML/CSS is the most common UI skill, which widens the pool of maintainers.
+  8. The browser sandbox limits what the app can touch: only the port and files the user picks.
 - **Limitations:**
   - Chromium browsers only.
   - The user must click "Connect" and pick the port once per session (a browser security rule). Chrome can remember the permission.
@@ -408,7 +451,93 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 
 **Likely link to NGZ's Mac problem.** The v0.1.1 notes say NGZ doesn't work on Macs. Unsigned, un-notarized apps downloaded on recent macOS are often reported as "damaged". The workaround is System Settings → Privacy & Security → **Open Anyway**; the old right-click → Open shortcut no longer works on macOS 15. Signing and notarizing should fix it. This is still unconfirmed until someone tests on a Mac.
 
-### 6.8 Sources
+### 6.8 What makes the code easiest to maintain
+
+Most maintenance pain in apps like these comes from **packaging and platforms**, not from the grading logic. Principles, whichever language wins:
+1. **One codebase in one language.** Today, three apps in three languages means every rule change happens three times.
+2. **No per-OS builds where possible.** Native modules, installers, signing and OS-specific bugs eat most of the time. NGZ's Mac problem is typical: Electron plus the `serialport` package needs native compilation per OS (the CI installs Python for node-gyp).
+3. **A small, dependency-light core of pure functions.** Card parsing and grading take data in and give a result out, with no UI or serial code mixed in.
+4. **Courses as data files, not code.** Adding a course set should mean editing a file, not making a release.
+5. **The grading spec as shared test cases**, so anyone, Claude included, can change code safely.
+6. **CI on every pull request,** plus a formatter, a linter and a type checker.
+7. **A replayable mock station,** so most changes can be tested without hardware.
+
+**Ranking on maintenance**
+1. TypeScript web app: no packaging, typed, core already split out. Needs `App.tsx` tidied (the "messy" feedback).
+2. EasySnec (Python): most readable, but Nuitka builds for 3 OSes, beta Slint workarounds, and still no Chromebooks.
+3. Electron: same code as the web app plus the full desktop-packaging burden.
+4. EasyGecNG: hardest.
+
+**Owning the protocol code.** NGZ ports GecoSI's protocol rather than using a library. That's more code to own, but the SI protocol hardly changes and the code is tested with real card data, so ongoing maintenance is low and there's less dependency risk.
+
+The biggest caveat: **the easiest code to maintain is code the maintainers know.** A well-tested app the team understands beats a better-built one nobody looks after.
+
+### 6.9 Python vs TypeScript: understanding and maintaining the code
+
+| | Python | TypeScript |
+|---|---|---|
+| **Reading it cold** | Reads close to English; little punctuation; indentation is enforced. Easiest for newcomers. | More syntax: braces, type annotations, arrow functions, `async`/`await`. React adds JSX and "hooks", which have subtle rules (NGZ's `App.tsx` re-registers its card listener on every screen change because of a hook dependency list). |
+| **Catching mistakes** | Type hints are optional and only checked if you run pyright/mypy. EasySnec runs neither (typeguard only checks during tests). Without them, a misspelled field fails at runtime, possibly mid-event. | Types are checked on every build. Renaming a field or changing a data shape flags every affected line before the app runs, and editor autocomplete is very good. A real edge as the app grows (protocol → grading → UI → storage). |
+| **Refactoring safely** | Good with tests plus a strict type checker; risky without. | Strong by default. |
+| **Ecosystem churn** | Slower-moving language and libraries; packaging tools (uv, Nuitka, PyInstaller) change fast. | npm moves fast: React, Vite, Electron need regular upgrades, and dependency trees are large (NGZ's renderer lockfile is ~1,700 lines). Mitigated by few dependencies (e.g. Preact or no framework). |
+| **Running it** | Runs directly; no build step. | Needs a build step (tsc/Vite), though tools make it near-instant. |
+| **Waiting on hardware** | Threads or asyncio needed to keep the UI responsive (review §8.2). | Async is built into the language and Web Serial, so no threads. |
+| **How many languages** | Python + Slint today, or Python + HTML/JS with pywebview: two either way, with a bridge. | One language from the station's bytes to the face on screen. |
+| **Testing** | pytest: very friendly. | Jest/Vitest: good. |
+| **Who knows it** | Taught widely; the tech dev team's language. | Universal for web work. |
+| **Claude** | Strong. | Strong. |
+
+**What matters more than the language is code style.** NGZ's dense one-line style (the "messy" feedback) is a style problem, not a TypeScript problem, and EasySnec's readability comes from habits as much as from Python. Either way, enforce:
+- a formatter (Ruff format / Prettier)
+- a linter (Ruff / ESLint)
+- **strict type checking** (pyright strict / TypeScript strict)
+- small files
+- tests
+
+**Verdict:**
+- For someone new reading the grading rules, Python is a little easier.
+- For keeping a growing app correct over years, TypeScript's enforced types give it the edge.
+- The gap between the languages is smaller than the gap between the delivery choices (web vs packaged desktop) in §6.1–6.2.
+
+### 6.10 Porting or rewriting: how much code would actually move?
+
+Both codebases are small, so **code volume isn't the deciding factor**. EasySnec's readability helps here: clear code is easy to translate, and its ideas carry over even where its code doesn't.
+
+**What's in EasySnec, and what happens to it in each direction**
+
+| Part | Size | Moving to TypeScript/web | Staying in Python + pywebview |
+|---|---|---|---|
+| Grading (`grading.py`) | ~250 lines | Being rewritten anyway for the new rules (§0); NGZ's validator is the base. Port the *ideas*: swap detection, the incomplete state, the mistake list. | Rewritten anyway for the new rules; can borrow NGZ's alignment algorithm (~250 lines of TypeScript, a straightforward translation). |
+| Course data (`courses.py`) | ~100 lines | Becomes a JSON data file; trivial | Becomes a JSON data file; trivial |
+| SI reading | library (`sportident`) | Not needed: NGZ's own protocol code replaces it | Stays |
+| App glue (`app.py`) | ~320 lines | Tied to Slint; rewritten as UI state handling | Partly rewritten for pywebview's bridge, plus the reader thread |
+| UI (`*.slint`) | ~740 lines | Redone in HTML/CSS; the *layouts and design* transfer, the code doesn't | Redone in HTML/CSS (same work as the TypeScript column) |
+| Faces, sounds, logo | assets | Reused as-is | Reused as-is |
+| Tests | ~330 lines | Cases become the shared JSON test cases; the harness is redone | Kept, plus the shared JSON test cases |
+| Mock station | small | Redone as a fake port replaying real card data | Improved to replay real card data |
+
+**What's in NGZ, and whether Python needs it**
+- **Protocol code** (~1,100 lines): not needed in Python, since `sportident` covers it.
+- **Course checker** (~250 lines): worth porting; straightforward.
+- **IOF XML import** (~50 lines): easy with Python's built-in `xml.etree`.
+- **Punch time-window filter:** a few lines.
+
+**Takeaways**
+- **Either direction is days of coding, not weeks.** Most of it is the UI, which has to be redone in both cases if Slint is dropped.
+- **The slow, valuable parts are language-neutral:** the grading spec and shared test cases, the course data, the design ideas, and testing on real hardware.
+- **Shared JSON test cases make a port verifiable.** Any translation, by a person or by Claude, can be checked against the same expected results.
+- **What doesn't port is people's familiarity.** That's the real cost of switching languages, and it's why the tech dev team's preference matters.
+
+### 6.11 Why not Java
+
+EasyGecNG works today and has the most features, so keep it as a feature reference and keep using it for events that need rankings and runner names until the new app covers them. Don't build on it:
+1. **Install friction:** users need Java (EasyGecNG needs Java 8, from 2014, with a license-confusing Oracle download). Bundling a runtime with `jpackage` adds 40–80 MB plus per-OS packaging and signing, the same burden as Electron.
+2. **Old UI toolkit:** Swing is in maintenance mode and looks dated. Big animated kid-friendly visuals are clumsy, and high-DPI screens have quirks. JavaFX is better but is a separate download.
+3. **No reach** beyond desktop: no browser, Chromebook or Android.
+4. **Nobody to maintain it:** neither the tech dev team (Python) nor the NGZ side (TypeScript) works in Java. The code is 10,000 lines with French names and windows-1252 encoding, and has no tests.
+5. **Already ported:** NGZ has TypeScript ports of the valuable parts (GecoSI's protocol and EasyGec's grading).
+
+### 6.12 Sources
 - [Chrome Web Serial docs](https://developer.chrome.com/docs/capabilities/serial)
 - [Intent to Ship: Web Serial on Android](https://groups.google.com/a/chromium.org/g/blink-dev/c/HBJ-uYFvkpM)
 - [Chrome 148 Beta for Android adds Web Serial](https://www.notebookcheck.net/Chrome-148-Beta-for-Android-adds-Web-Serial-SharedWorker-support.1269721.0.html)
@@ -416,3 +545,32 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 - [WebUSB-CP2102 driver](https://gh.r-mj.com/calcite/WebUSB-CP2102)
 - [Slint language integrations (Python = beta)](https://docs.slint.dev/latest/docs/slint/language-integrations/)
 
+---
+
+## 7. Glossary
+
+| Term | Meaning |
+|---|---|
+| **Kiosk** | A screen that does one job at a public spot with almost no interaction, e.g. a laptop at the finish where kids insert their card and see a big face. Large visuals, no menus during use, recovers on its own. |
+| **SI station / download box** | The SPORTident readout station. Its USB chip (Silicon Labs CP210x) makes it look like a serial port to the computer. |
+| **Web Serial** | Browser feature (Chrome, Edge, ChromeOS) that lets a web page talk to a serial device the user picks. |
+| **WebUSB** | Related browser feature for raw USB devices; with a JavaScript driver it can talk to the CP210x chip (useful on Android). |
+| **PWA (Progressive Web App)** | A website that can be installed like an app and work offline, via a *service worker* that caches its files on the device. |
+| **Code signing / notarization** | Attaching a publisher certificate to an app so Windows and macOS trust it; notarization is Apple's automated check of signed apps. See §6.7. |
+| **Electron** | Framework that packages a web app with its own copy of Chromium and Node into a desktop app (NGZ today). |
+| **Tauri** | Like Electron, but uses the OS's built-in browser view and a small Rust core, so installers are much smaller. |
+| **Slint** | Young UI toolkit with its own declarative `.slint` language and a Rust renderer; Python bindings are beta (EasySnec today). |
+| **pywebview** | Python library that shows an HTML/CSS/JS page in the OS's built-in browser view, with Python behind it. |
+| **Kivy** | Python UI toolkit with its own renderer; the one Python option that can build Android apps. |
+| **Nuitka** | Python compiler that turns the app into a standalone program bundling Python and its libraries, so users don't install Python. |
+| **Ruff** | Very fast Python linter and formatter: catches likely bugs and unused code, and formats code consistently. |
+| **typeguard** | Checks Python type hints at run time, during tests. |
+| **pyright / mypy** | Static type checkers for Python: find type mistakes without running the code. |
+| **Pinned action SHA** | Referencing a GitHub Action by exact commit hash instead of a movable tag like `@v4`, so a hijacked tag can't run unexpected code in CI. |
+| **Nix flake** | A file declaring the exact development tools for the Nix package manager; `nix develop` reproduces the setup. Others can ignore it. |
+| **Frozen dataclass** | Python data class whose instances are read-only after creation. Freezing is shallow: lists inside can still change, so use tuples. |
+| **`cached_property`** | A computed attribute that runs once on first access and remembers the result. |
+| **GIL** | Python's global interpreter lock; only one thread runs Python code at a time, but it's released while waiting on I/O such as the serial port. |
+| **Damerau–Levenshtein distance** | Number of insertions, deletions, substitutions and adjacent swaps to turn one list into another; EasySnec uses it to guess the course. |
+| **Levenshtein alignment** | The edit-distance method EasyGec and NGZ use to line up punches with a course and mark each control found or missing. |
+| **OTG (On-The-Go)** | USB mode/adapter that lets a phone or tablet act as a USB host and power a device like the SI station. |
