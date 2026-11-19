@@ -280,6 +280,8 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
    - split `App.css`
    - remove the duplicate `npm install serialport` steps from the README dev section
    - list `cli.ts` in the CLAUDE.md architecture
+   - fix the `App.tsx` effect that re-registers the card listener on every screen change, and break its dense one-liners into readable code (the "messy" feedback)
+   - show the course-set name on results once several sets can be active
 
 ### Phase 3 — Distribution and polish
 - Code signing (Windows/macOS), or at least clear instructions for the warnings.
@@ -303,6 +305,9 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 6. Should course sets come from the website, and in what format? IOF XML is the obvious choice.
 7. What threshold feels right for "couldn't tell which course"? I recommend at least half, configurable.
 8. Is the Poison-O scoring in §0 right? Does a Poison-O event have one list of all controls?
+9. **Do the schools and teachers we serve use Chromebooks, or locked-down laptops where they can't install software?** This decides whether a browser version is needed (§6.5).
+10. Is **Score-O with different point values per control** (from the v0.1.1 release notes) still wanted?
+11. Would the tech dev team rather stay in Python? If so, and a browser is needed, are they open to Python in the browser (Pyodide), or to TypeScript?
 
 ---
 

@@ -223,19 +223,33 @@ These workarounds come from using the **Python bindings for Slint, which are sti
 
 ## 6. Suggested PRs, in order (if EasySnec continues)
 
-1. **Fix the grading rules:**
+1. **Pull the logic out of `app.py`.** Course picking and grading flow move into a pure module of plain functions on plain data, with no Slint, serial or threading code. This makes everything below easier, and keeps a later port to TypeScript or the browser cheap (`OVERVIEW.md` §6.10).
+2. **Fix the grading rules** (decisions in `OVERVIEW.md` §0):
    - inline = in-order subsequence ignoring codes not on the course
    - score = all course codes present
-   - swap and backwards detectors
-   - a separate "no time" flag for missing start/finish that doesn't change the face
+   - swap and backwards detectors (backwards: say so, sad face)
+   - a separate "no time" flag for missing start/finish that keeps the happy face when the controls are right
+   - a configurable "couldn't tell which course" threshold (at least half the course found in order), and flag ties
 
-   Turn the `xfail` tables into real tests.
-2. **Crash fixes:** 4.2, 4.3, 4.6.
-3. **Move serial work off the UI thread** (4.5).
-4. **Course data as files** (JSON or IOF XML) loaded at startup, replacing the hard-coded `CourseManager`. Store the scoring type on each course (4.7, 4.8).
-5. **Persistence:** append each read to a CSV/JSONL log in the user data folder, and save course sets.
-6. **A mock station that replays real card dumps** (4.10).
-7. **Clean up the Slint/Python data passing** (4.9).
+   Turn the `xfail` tables into real tests, ideally as **shared JSON test cases** that NGZ also runs.
+3. **Crash fixes:** 4.2, 4.3, 4.6.
+4. **Move serial work off the UI thread** using the reader-thread pattern (§8.2).
+5. **Typing:**
+   - add **pyright** (strict) to CI alongside Ruff
+   - wrap `sportident`'s dicts in a small typed adapter that returns our own dataclass
+   - use tuples instead of lists inside frozen dataclasses (4.11)
+6. **Course data as files** (JSON or IOF XML) loaded at startup, replacing the hard-coded `CourseManager`:
+   - store the scoring type on each course (4.7, 4.8)
+   - show the course-set name on results and in the regrade dropdown, since names can repeat across sets
+7. **Persistence:** append each read to a CSV/JSONL log in the user data folder, and save course sets.
+8. **A mock station that replays real card dumps** (4.10).
+9. **UI layer:** either clean up the Slint/Python data passing (4.9), or, preferably, move the UI to **pywebview** with plain HTML/CSS (§8.1).
+10. **Housekeeping and distribution:**
+    - remove unused dependencies (`sireader`, `pydantic`) and replace `pyxdameraulevenshtein` with pure Python
+    - fix the "EasyGec" window title
+    - check Slint attribution if Slint stays
+    - add an Intel (x64) macOS build
+    - sign and notarize releases (`OVERVIEW.md` §6.7)
 
 ---
 
