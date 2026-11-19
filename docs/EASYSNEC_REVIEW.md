@@ -260,7 +260,8 @@ These workarounds come from using the **Python bindings for Slint, which are sti
     - remove unused dependencies (`sireader`, `pydantic`) and replace `pyxdameraulevenshtein` with pure Python
     - fix the "EasyGec" window title
     - check Slint attribution if Slint stays
-    - add an Intel (x64) macOS build
+    - add an Intel (x64) macOS build on an Intel GitHub runner
+    - ship the `--standalone` folder in the Inno Setup installer rather than `--onefile`, to reduce antivirus false positives
     - sign and notarize releases (`OVERVIEW.md` §6.7)
 
 ---

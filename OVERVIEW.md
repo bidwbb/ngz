@@ -500,7 +500,12 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 - **EasySnec (Nuitka): doable, with more scripting.**
   - Windows: sign the `.exe` after the build (Trusted Signing GitHub Action). Easy.
   - macOS: use Nuitka's `.app` bundle mode (already in `build_nuitka.sh` via `APP_BUNDLE=1`), not the one-file binary, which unpacks code at run time and is awkward to notarize. Then `codesign` with the hardened runtime (Python may need an entitlement such as `allow-unsigned-executable-memory`), `notarytool submit`, `stapler staple`. Expect some trial and error.
-- **A web app (either language): nothing to sign.**
+- **Does signing stop antivirus false positives?** It helps but doesn't guarantee it.
+  - Signing gives Windows SmartScreen and antivirus tools a known publisher, and reputation builds as more people download it.
+  - Nuitka's `--onefile` mode unpacks itself into a temp folder at launch. That behavior looks like malware to some antivirus heuristics, whether signed or not.
+  - Best practice for EasySnec: ship the `--standalone` folder inside the Inno Setup installer it already has, instead of `--onefile`. Sign both the installer and the `.exe`. If a scanner still flags it, submit the file to that vendor as a false positive (Microsoft has a portal for this).
+- **Intel Mac build for EasySnec: yes.** Add a second macOS job on an Intel GitHub runner (currently labelled `macos-15-intel`; check GitHub's current runner list), producing an x86_64 build next to the Apple Silicon one. First check that every dependency (Slint, `pyxdameraulevenshtein`, or its pure-Python replacement) publishes Intel-Mac wheels. A single "universal" Mac binary is harder with Nuitka; two downloads is simpler.
+- **A web app (either language): nothing to sign, no antivirus issues, no per-CPU builds.**
 
 **Likely link to NGZ's Mac problem.** The v0.1.1 notes say NGZ doesn't work on Macs. Unsigned, un-notarized apps downloaded on recent macOS are often reported as "damaged". The workaround is System Settings → Privacy & Security → **Open Anyway**; the old right-click → Open shortcut no longer works on macOS 15. Signing and notarizing should fix it. This is still unconfirmed until someone tests on a Mac.
 
