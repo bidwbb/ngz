@@ -406,7 +406,10 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 - **EasyGecNG** is the reference for features, not a base for new work.
 
 ### 6.5 Recommendation
-- **Technically, the strongest path is one TypeScript codebase.**
+- **The decision hinges on one question: do we need the app in a browser** (Chromebooks, share-by-link with no install or signing, maybe Android tablets)?
+  - **If no** (event laptops are Windows/Mac, and installers plus signing are acceptable): **stay in Python with EasySnec.** Use pywebview for the UI, pyright strict plus Ruff, the reader-thread pattern, course data files, shared test cases, and signed Nuitka builds. That's a perfectly sound choice.
+  - **If yes:** the browser forces JavaScript/TypeScript, and then the option below is the way.
+- **If browser reach matters, the strongest path is one TypeScript codebase.**
   - A core package (protocol, grading, course data) that is browser-safe and tested against shared test cases.
   - A **web/PWA front end** as the main way to deliver it.
   - The same UI optionally wrapped in Electron for offline/kiosk laptops or non-Chromium users.
@@ -494,10 +497,20 @@ The biggest caveat: **the easiest code to maintain is code the maintainers know.
 - small files
 - tests
 
+**Ruff and pyright do different jobs; use both.**
+- **Ruff** checks style and common bug patterns (unused imports, shadowed names, etc.) and formats the code. It does *not* check types.
+- **pyright** (the engine inside VS Code's Pylance) checks types. In `strict` mode in CI, Python gets most of TypeScript's safety.
+- The remaining gaps are untyped edges, which can be closed:
+  - The `sportident` library has no type hints and returns plain dicts: wrap it in a small typed adapter that returns a `TypedDict` or dataclass.
+  - Slint's generated classes are only partly typed (it now generates hints); pywebview's JavaScript bridge is untyped by nature.
+
+**"npm"** is JavaScript's package registry and the ecosystem around it. Its churn affects the TypeScript options (web app, Electron, Tauri UI), not Python. A pywebview UI written in plain HTML/JS, with libraries loaded from local files, needs no npm either.
+
 **Verdict:**
 - For someone new reading the grading rules, Python is a little easier.
 - For keeping a growing app correct over years, TypeScript's enforced types give it the edge.
 - The gap between the languages is smaller than the gap between the delivery choices (web vs packaged desktop) in §6.1–6.2.
+- **So the language alone is not a compelling reason to leave Python.** With pyright strict, Ruff, tests and the reader-thread pattern, Python can be kept correct. The only compelling reason for TypeScript is **delivery**: a browser app (link sharing, no installers or signing, Chromebooks, maybe Android) must be JavaScript/TypeScript, because Python can't use serial ports in a browser. See §6.5.
 
 ### 6.10 Porting or rewriting: how much code would actually move?
 
