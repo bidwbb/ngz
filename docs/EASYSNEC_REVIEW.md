@@ -85,6 +85,15 @@ mistakes (to_slint):
 
 The edit-distance algorithm only *guesses which course*. Grading is exact, which is why one extra or repeated punch fails the run (§4.1).
 
+### 2.4 Card parsing: who decodes the cards?
+
+EasySnec doesn't parse cards itself. It uses the third-party **`sportident`** Python library (1.2.8; the successor of `sireader`). From the library's source:
+- **Card types:** SI-Card 5, SI-Card 6 (including 6* and 192-punch mode, which it reassembles from 8 blocks), SI-Card 8, SI-Card 9, **SI-Card 10/11 and SIAC** (all handled by its "SI10" path, chosen by card number 7,000,000–9,999,999), plus pCard and tCard.
+- **Punch limit:** the SI10 path reads at most 128 punches, which is the capacity of SI10/11/SIAC cards in normal mode.
+- **Times:** each time is decoded on its own, relative to the computer clock (`now() + 2 h`), using the day-of-week byte where the card has one. Punches stay in **card memory order**, which is what the order-based rules in `OVERVIEW.md` §0 need.
+- **Station requirements:** the station must be in readout mode. The library reads card-insert events and requests the card blocks itself (handshake style).
+- **Comparison:** this is roughly the same card coverage as NGZ, whose parser is ported from GecoSI (SI5, SI6/6*, SI8, SI9, SI10/11/SIAC, pCard, 192-punch mode) and tested with real card data. The difference is ownership: NGZ's parser is our code with our tests; EasySnec relies on the library's maintainers and has **no EasySnec tests that feed real card dumps through it**. Adding a few recorded real cards as fixtures would close that gap (and feed the mock station, §4.10).
+
 ---
 
 ## 3. Strengths
@@ -209,8 +218,11 @@ These workarounds come from using the **Python bindings for Slint, which are sti
 | Extra and repeated punches are fine | ❌ fail (4.1) | Small: replace equality with alignment |
 | Card punch order beats station timestamps | ✅ already uses memory order | — (keep it) |
 | Missing start/finish: happy face if the course is right, plus "no time because you didn't punch Start/Finish" | ❌ shows "Try Again!" with the melting face | Small |
-| Default course sets: new Animal-O 31–40 and 41–50, old Animal-O, Basketball-O | Partial: two hard-coded "Cambridge Plays" sets on 31–40 | Small once the data is agreed |
-| Backwards detection: tell them, but sad face | Partial: "Out of Order" only | Small |
+| Built-in course sets: new Animal-O (its current "Cambridge Plays" sets), old Animal-O (EasyGecNG's set, 31–40 and 41–50), Basketball-O, Score-O 31–40 | Partial: new Animal-O only, hard-coded | Small (Basketball-O codes still needed) |
+| Wrong order: fail, labeled "shuffle" (nothing missing) or "backwards" (course in reverse) | Partial: "Out of Order" only | Small |
+| Old punches on uncleared cards dropped by card order (one time comparison for where this run starts) | ❌ no filtering | Small |
+| Organizer notes: "clocks out of sync" and "please clear your card" | ❌ | Small |
+| Score-O with point values per control; more course types later (one grader per type) | ❌ | Medium |
 | "No matching course" fallback | ❌ always picks the nearest | Small |
 | Save events and reads | ❌ | Medium |
 | Choose Score-O / Poison-O in the UI | ❌ (dropdown commented out, type fixed) | Medium |
