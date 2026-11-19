@@ -8,7 +8,7 @@ How the findings were checked: the grading results in §4.1 come from **running 
 
 ## 1. One-paragraph summary
 
-EasySnec is a small, readable card-reading kiosk: about 680 lines of Python and about 740 lines of Slint UI. It has a sensible split between the SI reader, grading and the UI. It also has good habits for a student project: a mock station window, typeguard in tests, Ruff, CI on PRs, and Nuitka builds for 3 operating systems. The UI looks good: an animated result panel, switchable course sets, and a dropdown to regrade against a different course.
+EasySnec is a small, readable card-reading kiosk: about 680 lines of Python and about 740 lines of Slint UI. It has a sensible split between the SI reader, grading and the UI. It also has good engineering habits: a mock station window, typeguard in tests, Ruff, CI on PRs, and Nuitka builds for 3 operating systems. The UI looks good: an animated result panel, switchable course sets, and a dropdown to regrade against a different course.
 
 The **grading rules are the main problem.** A run only counts as correct if the punch list is *exactly* the course. One extra or repeated punch, or old punches on an uncleared card, gives a sad face with the message "Out of Order", which is false. That conflicts with the rule we've now agreed (extras and repeats are fine). There is also a handful of crash-level bugs and some threading/robustness issues around the serial port. None of these is hard to fix.
 
@@ -128,7 +128,7 @@ Double punches are very common with kids, so this will show up at real events. T
 
 ### 4.5 🟠 Serial reads block the UI thread
 
-`request_check_si` runs inside a Slint timer callback, i.e. on the UI thread. `read_sicard()` sends commands and waits for replies with **a 5 s serial timeout** (`sportident.py:680`). A normal read takes a fraction of a second. If a child pulls the card mid-read, or the station is unplugged, the window freezes for up to several seconds. There's already a TODO ("move to coroutine"). Options: a worker thread that hands results back with `slint.invoke_from_event_loop`, or an asyncio task on `slint.run_event_loop` (`main()` already sets one up, but it's a placeholder).
+`request_check_si` runs inside a Slint timer callback, i.e. on the UI thread. `read_sicard()` sends commands and waits for replies with **a 5 s serial timeout** (`sportident.py:680`). A normal read takes a fraction of a second. If a child pulls the card mid-read, or the station is unplugged, the window freezes for up to several seconds. There's already a TODO ("move to coroutine"). See §8.2 for the recommended threading pattern.
 
 ### 4.6 🟠 Error handling in `request_check_si`
 
@@ -234,3 +234,70 @@ These workarounds come from using the **Python bindings for Slint, which are sti
 4. Have you tested on real hardware at an event? Did you see freezes when cards were pulled early?
 5. How do teachers and schools get the app today? Are there Chromebook-only schools you've had to turn away?
 6. Would anyone on the team be interested in a TypeScript/web version (see `OVERVIEW.md` §6), or is Python a firm preference?
+
+## 8. Technology options for the Python route
+
+### 8.1 Alternatives to Slint (keeping Python)
+
+Slint is a young UI toolkit (first released 2021) whose main audience is Rust and C++ developers. You describe screens in its own declarative `.slint` language; a native renderer draws them. Its Python bindings are labelled **beta**. Its free license requires attribution (or GPL use).
+
+EasySnec moved from Qt (PySide6 + QML) to Slint in mid-2026. The history suggests packaging and glue code were the reasons:
+- the repo had build scripts for five packaging tools before the switch
+- the `BackendInterface` class was full of Qt Signal/Slot/QEnum/Property declarations
+- a PR was needed to fix Qt↔Python combobox synchronization
+
+| Option | What it is | Pros | Cons |
+|---|---|---|---|
+| **pywebview** ⭐ | Python backend; the UI is an HTML/CSS/JS page shown in the OS's built-in browser view | Small; HTML/CSS is the most widely known UI skill; big faces, animations and sounds are easy; the UI could later be reused in a pure web app | OS browser views differ slightly; still needs Nuitka/PyInstaller packaging and signing |
+| **NiceGUI** | Python-only web UI framework that runs a local server and opens a native window or browser tab | Everything in Python; modern look; good docs | A local server inside the app; packaging still needed |
+| **Kivy** | Python UI toolkit with its own OpenGL renderer and layout language | Can produce **Android** apps (USB serial there needs extra Java-bridge work) | Dated look; smaller community; its own layout language |
+| **Toga (BeeWare)** | Python toolkit using each OS's native widgets, with mobile targets | Native look; Android/iOS targets | Young; serial on mobile unsolved; limited widgets |
+| **Tkinter / CustomTkinter** | Built into Python | Nothing extra to install; very stable | Animations and large graphics are clunky |
+| **PySide6 (Qt)** | What EasySnec used before | Most mature and powerful | The packaging and glue pain they left behind; 100 MB+ |
+| **Slint** (current) | — | Already built; light Python API; nice animation | Beta bindings and the workarounds in §4.9; no browser/Android from Python |
+
+**Recommendation if staying in Python: pywebview.** Python keeps the SI reader and grading; the UI becomes plain HTML/CSS/JS, the easiest kind for anyone to work on. It's also a bridge to a pure web app later. Kivy is the only Python option that reaches Android, at a real cost in effort and polish.
+
+### 8.2 Recommended threading pattern
+
+Rule: **only the UI thread touches UI objects; blocking serial I/O never runs on the UI thread.**
+
+Simplest robust design: one dedicated reader thread, and a queue that the existing UI timer drains.
+
+```python
+import queue, threading
+
+events: queue.Queue = queue.Queue()
+
+def reader_loop(reader, stop: threading.Event):
+    while not stop.is_set():
+        try:
+            if reader.poll_sicard() and reader.sicard is not None:
+                data = reader.read_sicard()          # blocking, off the UI thread
+                reader.ack_sicard()
+                events.put(("card", data))
+            else:
+                stop.wait(0.05)
+        except (SIReaderException, SIReaderCardChanged) as e:
+            events.put(("warning", str(e)))
+        except (OSError, serial.SerialException) as e:
+            events.put(("disconnected", str(e)))
+            return
+
+# in AppWindowPy: the existing 100 ms Slint timer now only drains the queue
+@slint.callback
+def request_check_si(self):
+    while True:
+        try:
+            kind, payload = events.get_nowait()
+        except queue.Empty:
+            return
+        ...  # grade and update UI properties here, on the UI thread
+```
+
+- The reader thread is the only code that touches the serial port, so no locks are needed around it. pyserial releases Python's lock (the GIL) while it waits for bytes, so the UI stays smooth.
+- Start the thread on Start or Connect and stop it with the `Event` on disconnect. Mark it `daemon=True` so quitting the app never hangs.
+- The other option is an asyncio task on `slint.run_event_loop()` that runs the blocking calls through `await asyncio.to_thread(reader.read_sicard)`. It's equally valid if the team prefers async, but the queue version is easier to reason about and test.
+- Grading is fast pure Python. It stays on the UI thread.
+
+Signing for Nuitka builds is covered in [`OVERVIEW.md` §6.7](../OVERVIEW.md).

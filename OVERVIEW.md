@@ -5,7 +5,7 @@ _Written 2026-11-19. It covers three programs that do the same job, plus the lib
 | Program | Repo | Stack | Authorship | Status |
 |---|---|---|---|---|
 | **EasyGecNG** | `Navigation-Games/EasyGecNG` (fork of Thierry Porret's EasyGec, which forks Simon Denier's Geco) | Java 8, Swing, Gradle | Hand-written. Original French authors, then Charlie Moore, Quinn Bowers, Oomi Pammit, Ivy Wong, Barb | In use (v1.1.1). Last commit Nov 2025 |
-| **EasySnec** | `Navigation-Games/EasySnec` | Python 3.14, Slint UI, `sportident` lib, uv, Nuitka | Hand-written by the student team (Quinn Bowers, Alex Ambarchian, Ivy Wong, Oomi Pammit, Alice, and others) | Active. v0.1.1, last merge Nov 2026 |
+| **EasySnec** | `Navigation-Games/EasySnec` | Python 3.14, Slint UI, `sportident` lib, uv, Nuitka | Hand-written by the tech dev team (Quinn Bowers, Alex Ambarchian, Ivy Wong, Oomi Pammit, Alice, and others) | Active. v0.1.1, last merge Nov 2026 |
 | **NGZ** | `bidwbb/ngz` (this repo) | TypeScript, Electron, React/Vite, `serialport` | Barb + Claude | v0.1.1, released installers for Win/Mac/Linux |
 | _(library)_ **GecoSI** | `Navigation-Games/GecoSI` (fork of Simon Denier's) | Java | Simon Denier. Fork changed only rxtx → jSerialComm and moved to Gradle | Used by EasyGecNG. NGZ's protocol layer is a TypeScript port of it |
 
@@ -102,7 +102,7 @@ A detailed code walkthrough and review of EasySnec is in [`docs/EASYSNEC_REVIEW.
 
 ### 1.2 EasySnec (Python/Slint)
 
-**Purpose:** "Python prototype of EasyGecNG." It's a fresh, kiosk-only rewrite by the student team. In 2026 it moved from Qt to Slint.
+**Purpose:** "Python prototype of EasyGecNG." It's a fresh, kiosk-only rewrite by the tech dev team. In 2026 it moved from Qt to Slint.
 
 **Flow (`src/easysnec/app.py`):**
 1. `AppWindowPy` is the Slint window. Slint timers poll ports every second and **the SI reader every 100 ms** (`request_check_si`).
@@ -196,7 +196,7 @@ These are the places where the three programs disagree or where a choice was mad
 | | Install experience | Size/weight | Who can work on it |
 |---|---|---|---|
 | EasyGecNG | Install JRE 8, unzip, run a `.bat`; terminal window visible | Small | Java devs; code is French-named and windows-1252 encoded |
-| EasySnec | Nuitka single binary + Inno installer (newish) | Medium | **Python: the student team's language** |
+| EasySnec | Nuitka single binary + Inno installer (newish) | Medium | **Python: the tech dev team's language** |
 | NGZ | One-click installers on all 3 OSes, already released | Large (Electron ≈ 100 MB+) | TS/React devs; Claude-assisted |
 
 None of the three is code-signed, so Windows SmartScreen and macOS Gatekeeper show warnings.
@@ -244,7 +244,7 @@ EasyGecNG does both: readout plus runner names, rankings and HTML/CSV export. Ea
 
 ### Phase 0 — Decide (no code)
 1. **Choose the long-term home.** See §6 for the technical assessment. The deciding factor is who will maintain it.
-   - If the student team is the long-term maintainer, **EasySnec is the main product**. NGZ then becomes the reference and testing ground, and its features get ported over: the punch window, IOF XML import, protocol robustness, installers.
+   - If the tech dev team is the long-term maintainer, **EasySnec is the main product**. NGZ then becomes the reference and testing ground, and its features get ported over: the punch window, IOF XML import, protocol robustness, installers.
    - If Barb plus Claude-assisted development is the main engine, **NGZ is the main product**. EasySnec's UX ideas get pulled in: swap detection, the incomplete state, course-set switches, regrading, mock station, animated faces.
    - Running two apps for the same job long-term doubles the work, so pick one by a set date.
 2. **Settle the grading rules in §2.1** and write them down as a short spec.
@@ -327,6 +327,11 @@ The USB driver situation is the same for every option. Windows needs the CP210x 
   - The course checker is already browser-safe.
   - The renderer is already browser code.
   - The work: replace about 25 uses of Node's `Buffer` with `Uint8Array`, write a Web Serial adapter, and move the per-card logic (punch filtering, choosing the course) out of `App.tsx` into the core.
+- **Local files work with permission.** A web app can't browse the disk on its own:
+  - *Saving its own data* (events, course sets, read log) goes into private browser storage. No prompt, but it lives inside the browser.
+  - *Opening a file* (e.g. an IOF XML course file) needs the user to pick it in a file dialog or drag it onto the page.
+  - *Saving or exporting* is either an ordinary download (CSV) or, in Chrome/Edge, a "Save as" dialog. After that, the app can keep writing to that same file (e.g. an auto-saving read log) once the user grants permission. Chrome can remember the permission for installed apps.
+- **Offline:** as an installed PWA, the app is cached on the device after one online visit and then runs with no internet. Data stays in local storage, with CSV export as a backup.
 - **Kiosk features are all available in the browser:** full screen, Web Audio sounds, wake lock (stops the screen sleeping), storage in IndexedDB, and file export by download.
 - **Limitations:**
   - Chromium browsers only.
@@ -386,12 +391,24 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 | **Web app / PWA (TypeScript)** | ~1 MB, loaded from a URL | Win/Mac/Linux/ChromeOS in Chrome or Edge; Android possible | Share by link; no install, signing or updates to manage; reuses NGZ's core; huge pool of web developers; Claude is strong here | Chromium browsers only; one "pick the port" click per session; offline use needs a PWA; Android unproven |
 | **Electron (NGZ today)** | 80–110 MB | Win/Mac/Linux | Full Node access; same TypeScript and React as the web; mature tooling | Big downloads; unsigned builds trigger warnings; Mac build reported broken; no Chromebook/Android |
 | **Tauri (TypeScript UI + small Rust shell)** | ~5–15 MB (estimate) | Win/Mac/Linux; mobile support is newer | Small installers; can reuse the web UI unchanged | Serial I/O must be done in Rust (a plugin); macOS/Linux web views (WebKit) differ from Chrome; another toolchain to learn |
-| **Python + Slint (EasySnec)** | tens of MB (Nuitka one-file; not measured) | Win/Mac/Linux | Python is accessible to students; small codebase; native-feeling UI | Slint's Python bindings are beta; no browser/ChromeOS/Android; Nuitka binaries trip antivirus; UI-thread blocking needs care |
+| **Python + Slint (EasySnec)** | tens of MB (Nuitka one-file; not measured) | Win/Mac/Linux | Python is the tech dev team's language and widely known; small codebase; native-feeling UI | Slint's Python bindings are beta; no browser/ChromeOS/Android; Nuitka binaries trip antivirus; UI-thread blocking needs care |
 | **Python + Qt (PySide6)** (EasySnec used this before moving to Slint) | ~100 MB+ | Win/Mac/Linux | Very mature, well documented | Heavy; the team already moved away from it; still no browser/Android |
 | **Java Swing (EasyGecNG)** | small, plus a Java install | Win/Mac/Linux | Works today; full feature set | Java 8 install; old UI toolkit; French-named, untested code |
 | **Rust + Slint** | ~10 MB | Win/Mac/Linux, Android natively | Fast, small, single binary; mobile possible | Steepest learning curve; fewest contributors; a total rewrite |
 
-### 6.7 Sources
+### 6.7 Code signing (any desktop build)
+
+**What it is.** Signing attaches a certificate to the app that proves who published it and that nobody has changed it since. Unsigned apps trigger Windows SmartScreen ("Windows protected your PC") and macOS Gatekeeper ("can't be opened" / "is damaged") warnings. A web app needs no signing, because HTTPS hosting provides the trust.
+
+| Platform | Steps | Rough cost |
+|---|---|---|
+| **Windows** | 1. Get a certificate. Easiest: Microsoft's cloud signing service, **Trusted Signing** (recently renamed Artifact Signing). Navigation Games verifies as an organization. The alternative is an OV certificate from DigiCert, Sectigo etc., whose key must live on a hardware token or cloud HSM. 2. Add the Trusted Signing GitHub Action (or electron-builder's `azureSignOptions`) to the release workflow. 3. Expect SmartScreen to still warn until the app builds download reputation. | ~$10/month (Trusted Signing), or ~$200–500/year (vendor certificate) |
+| **macOS** | 1. Enroll Navigation Games in the **Apple Developer Program** (a fee waiver exists for some nonprofits). 2. Create a **Developer ID Application** certificate. 3. Store the certificate (as a .p12) and an App Store Connect API key as GitHub secrets. 4. electron-builder signs and **notarizes** automatically when `CSC_LINK`, `CSC_KEY_PASSWORD` and the `APPLE_API_KEY*` variables are set. For Nuitka, use `codesign` + `xcrun notarytool submit` + `xcrun stapler staple`. 5. Build both arm64 and x64 (or universal) so Intel Macs work. | $99/year |
+| **Linux** | Not expected for AppImage | — |
+
+**Likely link to NGZ's Mac problem.** The v0.1.1 notes say NGZ doesn't work on Macs. Unsigned, un-notarized apps downloaded on recent macOS are often reported as "damaged". The workaround is System Settings → Privacy & Security → **Open Anyway**; the old right-click → Open shortcut no longer works on macOS 15. Signing and notarizing should fix it. This is still unconfirmed until someone tests on a Mac.
+
+### 6.8 Sources
 - [Chrome Web Serial docs](https://developer.chrome.com/docs/capabilities/serial)
 - [Intent to Ship: Web Serial on Android](https://groups.google.com/a/chromium.org/g/blink-dev/c/HBJ-uYFvkpM)
 - [Chrome 148 Beta for Android adds Web Serial](https://www.notebookcheck.net/Chrome-148-Beta-for-Android-adds-Web-Serial-SharedWorker-support.1269721.0.html)
