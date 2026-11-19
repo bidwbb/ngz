@@ -554,6 +554,20 @@ Both codebases are small, so **code volume isn't the deciding factor**. EasySnec
 - **Shared JSON test cases make a port verifiable.** Any translation, by a person or by Claude, can be checked against the same expected results.
 - **What doesn't port is people's familiarity.** That's the real cost of switching languages, and it's why the tech dev team's preference matters.
 
+**Staying in Python now and moving to a browser later.** This is easy *if the Python code is built with that in mind*:
+1. **Keep the core pure.** Grading and course logic as plain functions on plain data, with no Slint/pywebview, serial or threading code mixed in. Pure code translates almost line by line.
+2. **Keep data in language-neutral files.** Course sets as JSON or IOF XML; shared grading test cases as JSON. These move unchanged, and the test cases prove the port behaves identically.
+3. **Write the UI in HTML/CSS (pywebview).** That UI can be reused in a web app almost as-is: only the calls into Python (`window.pywebview.api...`) get replaced by direct calls into the TypeScript core.
+4. **Keep the serial layer thin and separate.** It gets replaced in any browser move anyway: NGZ's TypeScript protocol code over Web Serial already exists.
+5. **Avoid Python-only dependencies in the core** (e.g. a pure-Python edit distance instead of `pyxdameraulevenshtein`), and convert `sportident`'s dicts into our own typed dataclass at the edge.
+
+With that discipline, a later move is roughly:
+- the core logic (a few hundred lines): about a day or two of porting, checked against the shared test cases
+- the UI: mostly reused
+- the serial layer: swapped for NGZ's existing protocol code
+
+The parts that don't translate directly (threads become `async`, dataclasses become TypeScript interfaces) are small and well understood. Without that discipline, logic tangled into the UI or serial code makes a later port closer to a rewrite.
+
 ### 6.11 Why not Java
 
 EasyGecNG works today and has the most features, so keep it as a feature reference and keep using it for events that need rankings and runner names until the new app covers them. Don't build on it:
