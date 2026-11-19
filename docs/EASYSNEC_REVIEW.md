@@ -81,7 +81,7 @@ mistakes (to_slint):
 
 ---
 
-## 3. Strengths (worth saying tonight)
+## 3. Strengths
 
 - **Clear structure for its size.** Data is in frozen dataclasses, with `cached_property` for things that are derived from them.
 - **The UI is declarative and kept apart from the logic.** Python only sets properties and handles callbacks.
