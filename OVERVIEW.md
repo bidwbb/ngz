@@ -468,6 +468,27 @@ That points to one shape: a **pure core library** (protocol, grading, course dat
 - **The same browser limits apply:** Chrome/Edge only, no iOS, Android unproven.
 - **Verdict:** a legitimate option if the tech dev team strongly wants to stay in Python *and* browser reach is required. It costs more than TypeScript to build and debug, but it keeps the language. Worth a small prototype before committing. Sources: [serialx Pyodide backend](https://puddly.github.io/serialx/how-to/pyodide.html), [Pyodide deployment docs](https://pyodide.readthedocs.io/en/latest/usage/downloading-and-deploying.html), [Pyodide 314.0 release notes](https://blog.pyodide.org/posts/314-release/).
 
+**Will schools have a Chromium browser?** Most machines will, but not all:
+- **Chromebooks:** always (Chrome).
+- **Windows 10/11:** always. Microsoft Edge is Chromium-based and built in, even if IT sets another default browser.
+- **Macs:** ship with Safari only. Chrome or Edge must be installed, which school-managed Macs may block.
+- **iPads:** never usable (no USB serial at all).
+- **Locked-down devices:** IT can disable Web Serial or USB devices by policy in Chrome and Edge. Also, on Windows the station's CP210x driver may need admin rights to install. That applies to *every* option, not just the web app.
+- **Who owns the laptop matters most.** A Navigation Games or teacher-owned laptop is easy; a school IT-managed one may not be. Worth finding out which is typical.
+
+**Maintaining a web and a desktop version: yes, as one app with two "shells", not two apps.**
+- The core (protocol, grading, course data) and the UI are shared. Only the thin layer that talks to the serial port differs.
+- **TypeScript:**
+  - Web shell: Web Serial in Chrome/Edge.
+  - Desktop shell: Electron (bundles its own Chromium, so it works on a Mac with only Safari) using Node's `serialport`. NGZ already has this adapter.
+  - Or Tauri for smaller installers, with a Rust serial plugin.
+- **Python:**
+  - Web shell: Pyodide with Web Serial.
+  - Desktop shell: pywebview with `pyserial`/`sportident`.
+  - Both share the Python core and the same HTML UI.
+- **What the desktop shell brings back:** installers, signing and per-OS builds, but only for that version, and only if real users need it.
+- **Suggested approach:** launch web-first, keep the serial layer behind a small adapter interface from day one, and add the desktop shell only if real users can't use Chrome or Edge.
+
 ### 6.6 Technology options, pros and cons
 
 | Option | Download size | Platforms | Pros | Cons |
